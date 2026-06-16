@@ -94,5 +94,6 @@ This file serves as a persistent, running log of all tasks performed, design dec
   - Updated [AGENTS.md](file:///d:/motherboard/AGENTS.md) to add explicit conventions for always performing atomic commits.
   - Aligned the listed skills in [AGENTS.md](file:///d:/motherboard/AGENTS.md) by removing `prd` and `reasoningbank-intelligence` as they are not present in `.agents/skills/`.
   - Added `prd`, `drizzle` & `drizzle-orm-expert`, and `react-patterns` & `react-performance` to the skill guidelines in [AGENTS.md](file:///d:/motherboard/AGENTS.md) following their creation on disk.
+  - Added the `token-efficiency` skill guideline to [AGENTS.md](file:///d:/motherboard/AGENTS.md) after verifying its directory presence on disk. Checked for `safety-guard`, which is currently absent from `.agents/skills/` and therefore not listed in the guidelines.
 - **Status:** Documentation updated successfully.
 

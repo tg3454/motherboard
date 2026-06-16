@@ -18,6 +18,7 @@
 > - **`memory-md-management`**: Use when checking, auditing, updating, improving, or maintaining project memory files (such as `MEMORY.md`, `CLAUDE.md`, or creating one).
 > - **`deployment-patterns` & `devops-rollout-plan`**: MUST use for all DevOps, Docker, CI/CD, rollout plans, and rollback/deployment strategy work.
 > - **`security-review`**: MUST use when adding authentication, handling user input, working with secrets, creating API endpoints, or implementing sensitive features.
+> - **`token-efficiency`**: Use to reduce token waste by 40-60% through anti-sycophancy rules, tool-call budgets, one-pass coding, task profiles, and read-before-write enforcement.
 > - **`humaniser`**: Use while writing basically anything to remove signs of AI-generated writing and ensure natural phrasing.
 > - **`ai-agent-development`**: Use for all AI agent work (CrewAI, LangGraph, custom agents).
 > - **`vibe-code-cleanup` & `vibe-code-auditor`**: Use at all times for security and hardening once a task is done.
