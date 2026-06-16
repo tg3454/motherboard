@@ -22,6 +22,7 @@
 > - **`humaniser`**: Use while writing basically anything to remove signs of AI-generated writing and ensure natural phrasing.
 > - **`ai-agent-development`**: Use for all AI agent work (CrewAI, LangGraph, custom agents).
 > - **`vibe-code-cleanup` & `vibe-code-auditor`**: Use at all times for security and hardening once a task is done.
+> - **`safety-guard`**: Use when working on production systems or running agents autonomously to prevent destructive operations.
 > - **`plan-orchestrate`**: Use/suggest always for multi-step plan development.
 
 ***
