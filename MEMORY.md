@@ -90,8 +90,8 @@ This file serves as a persistent, running log of all tasks performed, design dec
 ### 2026-06-17 — Session 2: Documenting Skill Guidelines
 - **Actor:** Antigravity (Gemini 3.5 Flash)
 - **Actions:**
-  - Added "AI Agent Skill-Specific Guidelines" to [AGENTS.md](file:///d:/motherboard/AGENTS.md) to define precise usage triggers for codebase developer skills (including brainstorming, ui-ux-pro-max, code-reviewer, and others).
+  - Added "AI Agent Skill-Specific Guidelines" to [AGENTS.md](file:///d:/motherboard/AGENTS.md) to define precise usage triggers for codebase developer skills (matching exactly the folders in `.agents/skills`).
   - Updated [AGENTS.md](file:///d:/motherboard/AGENTS.md) to add explicit conventions for always performing atomic commits.
-  - Added the `prd` skill guidelines to the agent rules block in [AGENTS.md](file:///d:/motherboard/AGENTS.md).
+  - Aligned the listed skills in [AGENTS.md](file:///d:/motherboard/AGENTS.md) by removing `prd` and `reasoningbank-intelligence` as they are not present in `.agents/skills/`.
 - **Status:** Documentation updated successfully.
 

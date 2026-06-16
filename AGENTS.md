@@ -8,7 +8,6 @@
 >
 > **AI Agent Skill-Specific Guidelines:**
 > - **`brainstorming`**: MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements, and design before implementation.
-> - **`prd`**: Generate high-quality Product Requirements Documents (PRDs) for software systems and AI-powered features. Includes executive summaries, user stories, technical specifications, and risk analysis.
 > - **`ui-ux-pro-max`**: MUST use this before any UI/UX work (layouts, styling, animations, product types, guidelines).
 > - **`code-reviewer`**: MUST use this skill towards the end of every task, and always before a push. Always perform atomic commits.
 > - **`backend-patterns`**: MUST use for all backend work.
@@ -20,7 +19,6 @@
 > - **`ai-agent-development`**: Use for all AI agent work (CrewAI, LangGraph, custom agents).
 > - **`vibe-code-cleanup` & `vibe-code-auditor`**: Use at all times for security and hardening once a task is done.
 > - **`plan-orchestrate`**: Use/suggest always for multi-step plan development.
-> - **`reasoningbank-intelligence`**: Use when building self-learning agents, optimizing workflows, or implementing meta-cognitive systems.
 
 ***
 
