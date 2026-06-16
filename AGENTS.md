@@ -1364,9 +1364,10 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 - Never expose internal error messages, stack traces, or database errors to API responses.
 - Use a custom `AppError` class with a `code` string for business logic errors.
 
-### Commit Message Convention
+### Git & Commit Conventions
 
-Use conventional commits: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`.
+- **Always perform atomic commits:** Keep commits small, focused, and representing a single logical change. Do not group unrelated changes into a single commit.
+- **Use conventional commits:** Format messages using `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`.
 
 ***
 

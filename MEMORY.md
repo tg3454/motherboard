@@ -91,5 +91,6 @@ This file serves as a persistent, running log of all tasks performed, design dec
 - **Actor:** Antigravity (Gemini 3.5 Flash)
 - **Actions:**
   - Added "AI Agent Skill-Specific Guidelines" to [AGENTS.md](file:///d:/motherboard/AGENTS.md) to define precise usage triggers for codebase developer skills (including brainstorming, ui-ux-pro-max, code-reviewer, and others).
+  - Updated [AGENTS.md](file:///d:/motherboard/AGENTS.md) to add explicit conventions for always performing atomic commits.
 - **Status:** Documentation updated successfully.
 
