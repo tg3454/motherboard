@@ -146,3 +146,14 @@ This file serves as a persistent, running log of all tasks performed, design dec
   - Staged, committed, and pushed both files to Git.
 - **Status:** Consolidated legal and governance reference document completed, skill rules updated, and all changes pushed.
 
+### 2026-06-17 — Session 8: Migration to FastAPI & CORS Security Guide
+- **Actor:** Antigravity (Gemini 3.5 Pro)
+- **Actions:**
+  - Migrated the backend tech stack rules from Fastify/Node.js to FastAPI/Python.
+  - Deleted the obsolete Node.js/Fastify backend skill folders (`backend-patterns`, `nodejs-backend-patterns`, `fastify-best-practices`) from `.agents/skills/` and removed them from `skills-lock.json`.
+  - Registered `fastapi` and `fastapi-patterns` skill guidelines in [AGENTS.md](file:///d:/motherboard/AGENTS.md).
+  - Authored a defensive [cors_security_guide.md](file:///d:/motherboard/docs/cors_security_guide.md) documenting CORS risk vectors and secure FastAPI testing patterns.
+  - Staged, committed, and pushed all updates to Git.
+- **Status:** Backend skill migration complete and defensive CORS documentation pushed.
+
+
