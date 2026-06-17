@@ -1,31 +1,213 @@
 ---
 name: nextjs-best-practices
-description: Next.js App Router principles. Server Components, data fetching, routing patterns.
-license: MIT
+description: "Next.js App Router principles. Server Components, data fetching, routing patterns."
+risk: unknown
+source: community
+date_added: "2026-02-27"
 ---
 
-# Next.js App Router Best Practices
+# Next.js Best Practices
 
-## 1. Server vs. Client Components
-* **Default to Server Components (RSC):** All components in the `app` router are Server Components by default. Keep them as Server Components to reduce client-side bundle size.
-* **Use Client Components (`"use client"`) only when necessary:**
-  * Interactive elements using state/effects (`useState`, `useEffect`, `useReducer`).
-  * Browser-only APIs (e.g., `window`, `document`, `localStorage`).
-  * Custom hooks depending on state or context.
-* **Component Placement:** Push client-side interactivity to the leaves of your component tree. Do not mark entire pages as `"use client"` if only a small button needs interactivity.
+> Principles for Next.js App Router development.
 
-## 2. Data Fetching & Caching
-* **Fetch Data on the Server:** Perform data fetching inside Server Components using standard async/await `fetch` or direct database queries.
-* **Parallel vs. Sequential Fetching:**
-  * **Parallel:** Trigger requests concurrently to avoid waterfalls (e.g., `Promise.all([getUsers(), getPosts()])`).
-  * **Sequential:** Fetch sequentially if one request depends on the result of another.
-* **Caching (Next.js 15 / React 19):**
-  * Use standard `fetch` which handles caching options naturally.
-  * Utilize dynamic APIs (`cookies`, `headers`, `searchParams`) carefully as their usage opts the route into dynamic rendering.
-  * For database queries (like Drizzle), wrap calls in React's `cache` helper if the same data is requested multiple times in a single render pass.
+---
 
-## 3. Routing Patterns & Layouts
-* **Layouts (`layout.tsx`):** Use layouts for shared UI elements (sidebars, navbars). Layouts do not re-render on navigation; they preserve state.
-* **Templates (`template.tsx`):** Similar to layouts but mount a new instance on navigation. Use templates when you need to force mount/unmount animations or reset state.
-* **Error Boundaries (`error.tsx`):** Define error boundaries at route segments to gracefully catch runtime rendering errors and isolate failures.
-* **Loading UI (`loading.tsx`):** Use React Suspense-driven loading components to display instant loading states during page transitions.
+## 1. Server vs Client Components
+
+### Decision Tree
+
+```
+Does it need...?
+│
+├── useState, useEffect, event handlers
+│   └── Client Component ('use client')
+│
+├── Direct data fetching, no interactivity
+│   └── Server Component (default)
+│
+└── Both? 
+    └── Split: Server parent + Client child
+```
+
+### By Default
+
+| Type | Use |
+|------|-----|
+| **Server** | Data fetching, layout, static content |
+| **Client** | Forms, buttons, interactive UI |
+
+---
+
+## 2. Data Fetching Patterns
+
+### Fetch Strategy
+
+| Pattern | Use |
+|---------|-----|
+| **Default** | Static (cached at build) |
+| **Revalidate** | ISR (time-based refresh) |
+| **No-store** | Dynamic (every request) |
+
+### Data Flow
+
+| Source | Pattern |
+|--------|---------|
+| Database | Server Component fetch |
+| API | fetch with caching |
+| User input | Client state + server action |
+
+---
+
+## 3. Routing Principles
+
+### File Conventions
+
+| File | Purpose |
+|------|---------|
+| `page.tsx` | Route UI |
+| `layout.tsx` | Shared layout |
+| `loading.tsx` | Loading state |
+| `error.tsx` | Error boundary |
+| `not-found.tsx` | 404 page |
+
+### Route Organization
+
+| Pattern | Use |
+|---------|-----|
+| Route groups `(name)` | Organize without URL |
+| Parallel routes `@slot` | Multiple same-level pages |
+| Intercepting `(.)` | Modal overlays |
+
+---
+
+## 4. API Routes
+
+### Route Handlers
+
+| Method | Use |
+|--------|-----|
+| GET | Read data |
+| POST | Create data |
+| PUT/PATCH | Update data |
+| DELETE | Remove data |
+
+### Best Practices
+
+- Validate input with Zod
+- Return proper status codes
+- Handle errors gracefully
+- Use Edge runtime when possible
+
+---
+
+## 5. Performance Principles
+
+### Image Optimization
+
+- Use next/image component
+- Set priority for above-fold
+- Provide blur placeholder
+- Use responsive sizes
+
+### Bundle Optimization
+
+- Dynamic imports for heavy components
+- Route-based code splitting (automatic)
+- Analyze with bundle analyzer
+
+---
+
+## 6. Metadata
+
+### Static vs Dynamic
+
+| Type | Use |
+|------|-----|
+| Static export | Fixed metadata |
+| generateMetadata | Dynamic per-route |
+
+### Essential Tags
+
+- title (50-60 chars)
+- description (150-160 chars)
+- Open Graph images
+- Canonical URL
+
+---
+
+## 7. Caching Strategy
+
+### Cache Layers
+
+| Layer | Control |
+|-------|---------|
+| Request | fetch options |
+| Data | revalidate/tags |
+| Full route | route config |
+
+### Revalidation
+
+| Method | Use |
+|--------|-----|
+| Time-based | `revalidate: 60` |
+| On-demand | `revalidatePath/Tag` |
+| No cache | `no-store` |
+
+---
+
+## 8. Server Actions
+
+### Use Cases
+
+- Form submissions
+- Data mutations
+- Revalidation triggers
+
+### Best Practices
+
+- Mark with 'use server'
+- Validate all inputs
+- Return typed responses
+- Handle errors
+
+---
+
+## 9. Anti-Patterns
+
+| ❌ Don't | ✅ Do |
+|----------|-------|
+| 'use client' everywhere | Server by default |
+| Fetch in client components | Fetch in server |
+| Skip loading states | Use loading.tsx |
+| Ignore error boundaries | Use error.tsx |
+| Large client bundles | Dynamic imports |
+
+---
+
+## 10. Project Structure
+
+```
+app/
+├── (marketing)/     # Route group
+│   └── page.tsx
+├── (dashboard)/
+│   ├── layout.tsx   # Dashboard layout
+│   └── page.tsx
+├── api/
+│   └── [resource]/
+│       └── route.ts
+└── components/
+    └── ui/
+```
+
+---
+
+> **Remember:** Server Components are the default for a reason. Start there, add client only when needed.
+
+## When to Use
+This skill is applicable to execute the workflow or actions described in the overview.
+
+## Limitations
+- Use this skill only when the task clearly matches the scope described above.
+- Do not treat the output as a substitute for environment-specific validation, testing, or expert review.
+- Stop and ask for clarification if required inputs, permissions, safety boundaries, or success criteria are missing.

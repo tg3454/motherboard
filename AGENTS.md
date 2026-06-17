@@ -44,6 +44,8 @@
 
 All services run in Docker containers orchestrated with Docker Compose for self-hosted VPS deployment.
 
+For the complete development stages and feature roadmap, see the [Project Roadmap](file:///d:/motherboard/docs/roadmap.md).
+
 ***
 
 ## Required Secrets — Gather Before Starting

@@ -129,3 +129,10 @@ This file serves as a persistent, running log of all tasks performed, design dec
   - Added `nextjs-best-practices` skill guidelines to [AGENTS.md](file:///d:/motherboard/AGENTS.md).
 - **Status:** Skill rules and directories updated and pushed.
 
+### 2026-06-17 — Session 6: Documenting Project Roadmap
+- **Actor:** Antigravity (Gemini 3.5 Pro)
+- **Actions:**
+  - Created [roadmap.md](file:///d:/motherboard/docs/roadmap.md) describing the five roadmap stages (Finance, AI, Department features, Compliance, TBD) from the whiteboard roadmap session.
+  - Linked [roadmap.md](file:///d:/motherboard/docs/roadmap.md) in [README.md](file:///d:/motherboard/README.md) and [AGENTS.md](file:///d:/motherboard/AGENTS.md) for future agent context.
+- **Status:** Roadmap documented, committed, and pushed.
+

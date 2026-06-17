@@ -8,6 +8,8 @@ The internal operations platform for the **bits&bytes** network.
 
 Motherboard acts as the central Identity & Access Management (IAM) engine, provisioning worker, and event/plugin SDK platform for coordinating all local city forks, contributor roles, and discord integrations.
 
+For details on development phases and future feature integrations, see the [Project Roadmap](file:///d:/motherboard/docs/roadmap.md).
+
 
 ---
 
