@@ -2,6 +2,7 @@
 node_modules
 
 .turbo
+.code
 
 # output
 out
@@ -28,6 +29,13 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .eslintcache
 .cache
 *.tsbuildinfo
+
+# Python artifacts
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
 
 # IntelliJ based IDEs
 .idea

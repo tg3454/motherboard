@@ -167,6 +167,21 @@ This file serves as a persistent, running log of all tasks performed, design dec
   - Verified both specifications are clean, complete, and contain no TODO/TBD placeholders.
 - **Status:** Backend specification fully transitioned to FastAPI, and all documents synchronized.
 
+### 2026-06-17 — Session 10: Phase 0 Planning for FastAPI Repo Realignment
+- **Actor:** Code
+- **Actions:**
+  - Read `docs/techspec.md`, the current root workspace files, Docker config, and memory notes to compare the FastAPI edition spec against the live Bun/TypeScript scaffold.
+  - Ran `bunx skills find brainstorming` and `bunx skills find plan-orchestrate` as required before planning work.
+  - Launched a nine-agent planning batch to synthesize a Phase 0 execution plan from multiple model perspectives.
+  - Confirmed the repo still contains the old TypeScript backend packages (`packages/db`, `packages/iam`, `packages/events`, `packages/plugin-sdk`, `packages/provisioning`) and a Fastify-oriented `apps/api` scaffold.
+  - Identified the main Phase 0 migration gap: the spec now expects a hybrid Bun + uv layout with `apps/api` converted to FastAPI/Python and backend domains moved under `apps/api/app/`.
+- **Status:** Planning complete; implementation has not started yet. Next step is to execute the agreed Phase 0 repo realignment.
 
-
-
+### 2026-06-17 — Session 11: Phase 0 Execution for FastAPI Repo Realignment
+- **Actor:** Antigravity (Gemini 3.1 Pro)
+- **Actions:**
+  - Deleted obsolete TypeScript backend packages (`packages/db`, `packages/iam`, `packages/events`, `packages/plugin-sdk`, `packages/provisioning`).
+  - Removed old Fastify scaffolding from `apps/api` (`src`, `node_modules`, `package.json`, `tsconfig.json`).
+  - Verified `apps/api` Python layout using `uv` matching the specification.
+  - Confirmed `apps/web` depends only on `@bnb/ui`.
+- **Status:** Phase 0 execution complete. Repository is correctly realigned to the hybrid Bun + uv FastAPI spec. Ready for Phase 1.

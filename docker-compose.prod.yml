@@ -8,14 +8,10 @@ services:
       POSTGRES_DB: motherboard
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
 
   api:
     build:
@@ -25,8 +21,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://bnb:${POSTGRES_PASSWORD:-changeme}@postgres:5432/motherboard
-    ports:
-      - "8000:8000"
+      API_URL: http://api:8000
     depends_on:
       - postgres
       - redis
@@ -39,8 +34,6 @@ services:
     env_file: .env
     environment:
       API_URL: http://api:8000
-    ports:
-      - "3000:3000"
     depends_on:
       - api
 
