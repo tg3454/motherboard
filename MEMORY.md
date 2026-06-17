@@ -122,3 +122,10 @@ This file serves as a persistent, running log of all tasks performed, design dec
   - Added `database-migrations-sql-migrations` and `finance-billing-ops` skill guidelines to [AGENTS.md](file:///d:/motherboard/AGENTS.md).
 - **Status:** Skill rules updated and committed.
 
+### 2026-06-17 — Session 5: Adding Next.js Best Practices Skill
+- **Actor:** Antigravity (Gemini 3.5 Pro)
+- **Actions:**
+  - Created `.agents/skills/nextjs-best-practices/SKILL.md` defining key App Router and rendering/fetching/routing best practices.
+  - Added `nextjs-best-practices` skill guidelines to [AGENTS.md](file:///d:/motherboard/AGENTS.md).
+- **Status:** Skill rules and directories updated and pushed.
+

@@ -18,6 +18,7 @@
 > - **`drizzle` & `drizzle-orm-expert`**: MUST use when building type-safe database layers with Drizzle (schema design, relational queries, migrations, indexes, joins, inferred types, db.select/db.query, and pgTable patterns).
 > - **`database-migrations-sql-migrations`**: SQL database migrations with zero-downtime strategies for PostgreSQL, MySQL, and SQL Server. Focus on data integrity and rollback plans.
 > - **`react-patterns` & `react-performance`**: MUST use when writing, reviewing, or refactoring React/Next.js components for styling, hooks discipline, server/client boundaries, and performance optimization.
+> - **`nextjs-best-practices`**: Next.js App Router principles. Server Components, data fetching, routing patterns.
 > - **`finance-billing-ops`**: Evidence-first revenue, pricing, refunds, team-billing, and billing-model truth workflow for ECC. Use when the user wants a sales snapshot, pricing comparison, duplicate-charge diagnosis, or code-backed billing reality instead of generic payments advice.
 > - **`memory-md-management`**: Use when checking, auditing, updating, improving, or maintaining project memory files (such as `MEMORY.md`, `CLAUDE.md`, or creating one).
 > - **`deployment-patterns` & `devops-rollout-plan`**: MUST use for all DevOps, Docker, CI/CD, rollout plans, and rollback/deployment strategy work.
