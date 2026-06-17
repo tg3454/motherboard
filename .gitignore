@@ -42,3 +42,9 @@ __pycache__/
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# Next.js output
+.next/
+.next
+next-env.d.ts
+

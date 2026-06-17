@@ -186,3 +186,16 @@ This file serves as a persistent, running log of all tasks performed, design dec
   - Verified `apps/api` Python layout using `uv` matching the specification.
   - Confirmed `apps/web` depends only on `@bnb/ui`.
 - **Status:** Phase 0 execution complete. Repository is correctly realigned to the hybrid Bun + uv FastAPI spec. Ready for Phase 1.
+
+### 2026-06-17 — Session 12: Cinematic Space-Travel Landing Page
+- **Actor:** Antigravity (Gemini 3.5 Flash)
+- **Actions:**
+  - Brainstormed and implemented a high-fidelity Space-Travel Landing Page in `apps/web` utilizing Next.js 15 App Router and React 19.
+  - Installed `framer-motion` in `apps/web` for entrance animations.
+  - Authored a custom JS-based [FadingVideo.tsx](file:///d:/motherboard/apps/web/components/FadingVideo.tsx) player using requestAnimationFrame to handle manual looping and 500ms opacity crossfading.
+  - Authored [BlurText.tsx](file:///d:/motherboard/apps/web/components/BlurText.tsx) to animate text word-by-word with staggered opacity/blur transitions triggered by a 10% threshold IntersectionObserver.
+  - Implemented [HeroSection.tsx](file:///d:/motherboard/apps/web/components/HeroSection.tsx) with a fixed glass navbar, stats display cards, and entrance animations.
+  - Implemented [CapabilitiesSection.tsx](file:///d:/motherboard/apps/web/components/CapabilitiesSection.tsx) with a kicker, title, and three interactive liquid-glass cards (AI Scenery, Batch Production, Smart Lighting) containing customized SVGs.
+  - Added `.liquid-glass` and `.liquid-glass-strong` styles to the shared index.css stylesheet in [packages/ui](file:///d:/motherboard/packages/ui/src/index.css) and updated package exports to expose the CSS to Next.js.
+  - Verified a clean and successful compilation and Turborepo build (`bun run build`) with no TypeScript or Next.js Webpack compile errors.
+- **Status:** Cinematic space-travel landing page successfully implemented, styled, verified, and compiled.

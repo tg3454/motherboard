@@ -1,11 +1,12 @@
-// @bnb/web Main Page
 import React from 'react';
+import HeroSection from '../components/HeroSection';
+import CapabilitiesSection from '../components/CapabilitiesSection';
 
 export default function Home() {
   return (
-    <main style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-      <h1>bits&bytes Motherboard</h1>
-      <p>System operational platform dashboard.</p>
+    <main className="relative bg-black min-h-screen w-full">
+      <HeroSection />
+      <CapabilitiesSection />
     </main>
   );
 }
