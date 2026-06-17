@@ -30,7 +30,7 @@ The Board of Directors holds final legal, fiduciary, and governance authority. I
 
 ### 1.4 Executive Team
 Appointed by the Board under Article 28 of the e-AOA for day-to-day operational management.
-* **Chief Executive Officer (CEO):** Yash Singh
+* **Chief Executive Officer (CEO):** Yash Vardhan Singh
 * **Chief Technology Officer (CTO):** Akshat Kushwaha
 * **Chief Operating Officer / Chief Creative Officer (COO/CCO):** Aadrika Maurya
 * **Chief Financial Officer (CFO):** Devaansh Pathak
