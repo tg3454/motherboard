@@ -156,4 +156,17 @@ This file serves as a persistent, running log of all tasks performed, design dec
   - Staged, committed, and pushed all updates to Git.
 - **Status:** Backend skill migration complete and defensive CORS documentation pushed.
 
+### 2026-06-17 — Session 9: Rewrite Specification for FastAPI Backend
+- **Actor:** Antigravity (Gemini 3.5 Flash)
+- **Actions:**
+  - Brainstormed and aligned on the Python directory layout, using Approach 1 where core backend packages (IAM, Database, Provisioning, Event Bus, Plugin SDK) are placed inside `apps/api/app/` as internal modules, and Next.js acts as the decoupled frontend.
+  - Selected async SQLAlchemy 2.0 with Alembic migrations for the database layer.
+  - Rewrote [techspec.md](file:///d:/motherboard/docs/techspec.md) to define the FastAPI/Python monorepo structure, technology versions, SQLAlchemy ORM schema tables, async principal resolution and policy validation, typed asyncio and Redis event bus, dynamic plugin router loading, background sync worker, and uv-based Dockerfiles.
+  - Synchronized the embedded specification copy inside [AGENTS.md](file:///d:/motherboard/AGENTS.md) to maintain absolute consistency across workspace instructions.
+  - Deleted the obsolete Drizzle skills (`drizzle`, `drizzle-orm-expert`) from `.agents/skills/` and removed them from `skills-lock.json`.
+  - Verified both specifications are clean, complete, and contain no TODO/TBD placeholders.
+- **Status:** Backend specification fully transitioned to FastAPI, and all documents synchronized.
+
+
+
 

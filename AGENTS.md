@@ -39,13 +39,11 @@
 
 - An **Identity & Access Management (IAM) core** — Discord is the upstream identity provider. Users log in via Discord OAuth. Discord guild roles are imported via the Discord API and mapped to internal groups through an admin UI.
 - A **provisioning engine** — a sync worker keeps internal users, roles, and entitlements in sync with the Discord guild on a schedule and on-demand.
-- A **plugin platform** — an elaborately specified SDK allows first- and third-party plugins to register routes, UI panels (using the main app's component library), event bus subscriptions, database migrations, permissions, and audit entries.
-- A **web dashboard** — Next.js frontend decoupled from the Fastify backend via a clean REST API boundary.
+- A **plugin platform** — an elaborately specified SDK allows first- and third-party plugins to register routes (with the FastAPI app), UI panels (using the Next.js shell and shared component library), event bus subscriptions, database migrations, permissions, and audit entries.
+- A **web dashboard** — Next.js 15 frontend decoupled from the FastAPI backend via a clean REST API boundary.
 - A **Discord bot integration layer** — the existing bits&bytes Discord bot connects to the motherboard over HTTP/WebSocket to sync identity state. The bot is NOT rebuilt here; only the integration contract is defined and the sync endpoint is implemented.
 
 All services run in Docker containers orchestrated with Docker Compose for self-hosted VPS deployment.
-
-For the complete development stages and feature roadmap, see the [Project Roadmap](file:///d:/motherboard/docs/roadmap.md).
 
 ***
 
@@ -59,12 +57,12 @@ The agent must not proceed to Phase 2 until the operator confirms all of the fol
 | `DISCORD_CLIENT_SECRET` | OAuth2 app client secret | Discord Developer Portal → OAuth2 |
 | `DISCORD_BOT_TOKEN` | Bot token for guild member/role sync | Discord Developer Portal → Bot |
 | `DISCORD_GUILD_ID` | The bits&bytes Discord server ID | Right-click server → Copy Server ID |
-| `DATABASE_URL` | Postgres connection string | Self-hosted container (auto-generated in docker-compose) |
-| `SESSION_SECRET` | Long random string for cookie signing | Generate: `openssl rand -hex 64` |
+| `DATABASE_URL` | Postgres connection string | Self-hosted container (auto-generated in docker-compose, e.g., `postgresql+asyncpg://bnb:pwd@postgres:5432/motherboard`) |
+| `SESSION_SECRET` | Long random string for cookie signing / sessions | Generate: `openssl rand -hex 64` |
 | `API_INTERNAL_SECRET` | Shared secret between API and Bot | Generate: `openssl rand -hex 32` |
 | `NEXTAUTH_SECRET` | NextAuth.js secret | Generate: `openssl rand -hex 32` |
 | `NEXTAUTH_URL` | Public URL of the Next.js app | VPS domain or `http://localhost:3000` |
-| `API_URL` | Internal URL of Fastify API | `http://api:4000` in Docker, `http://localhost:4000` locally |
+| `API_URL` | Internal URL of FastAPI API | `http://api:8000` in Docker, `http://localhost:8000` locally |
 
 **Discord OAuth redirect URI** to register in the Developer Portal:
 - `http://localhost:3000/api/auth/callback/discord` (development)
@@ -74,57 +72,71 @@ The agent must not proceed to Phase 2 until the operator confirms all of the fol
 
 ## Monorepo Structure
 
+The project has a hybrid structure: Next.js frontend and React shared libraries use Bun workspace orchestration, while the FastAPI backend uses Python with `uv` package management.
+
 ```
 bnb-motherboard/
 ├── apps/
 │   ├── web/                    # Next.js 15 App Router (frontend)
-│   └── api/                    # Fastify 5 backend
+│   └── api/                    # FastAPI (Python) backend
+│       ├── app/
+│       │   ├── main.py         # Application root & lifespan
+│       │   ├── config.py       # Pydantic-settings config
+│       │   ├── database.py     # SQLAlchemy DB connection & sessionmaker
+│       │   ├── dependencies.py # FastAPI dependencies (auth, principal resolver)
+│       │   ├── db/             # SQLAlchemy ORM models and seeds
+│       │   ├── iam/            # IAM: Principal resolver, policy evaluation, audit
+│       │   ├── provisioning/   # Discord member sync worker & scheduler
+│       │   ├── events/         # Redis-backed/in-process Typed Event Bus
+│       │   ├── plugin_sdk/     # Plugin SDK engine and loader
+│       │   ├── routers/        # API route files
+│       │   └── schemas/        # Pydantic v2 schemas (request/response validation)
+│       ├── alembic/            # Database migration revisions
+│       ├── alembic.ini
+│       ├── pyproject.toml      # uv-managed python configuration
+│       └── tests/              # pytest suite
 ├── packages/
-│   ├── db/                     # Drizzle ORM schema + migrations + client
-│   ├── iam/                    # Principal resolution, policy evaluator, permission helpers
-│   ├── provisioning/           # Discord sync worker, role mapper, deprovisioner
-│   ├── events/                 # Typed event bus (internal, in-process + Redis pub/sub)
-│   ├── plugin-sdk/             # Plugin development kit — the elaborated SDK
-│   └── ui/                     # Shared React component library (used by web + plugin UIs)
-├── plugins/                    # First-party plugins (empty in Phase 1, populated in Phase 3+)
+│   └── ui/                     # Shared React component library (Next.js + Plugin UIs)
+├── plugins/                    # First- and third-party operational plugins
+│   └── <plugin_id>/
+│       ├── ui/                 # React frontend entry points (rendered in web dashboard)
+│       └── api/                # Python backend APIRouter entry points (mounted in FastAPI)
 ├── docker/
-│   ├── api.Dockerfile
-│   ├── web.Dockerfile
-│   └── worker.Dockerfile
+│   ├── api.Dockerfile          # Python / uv Dockerfile
+│   └── web.Dockerfile          # Bun / Next.js Dockerfile
 ├── docker-compose.yml
 ├── docker-compose.prod.yml
 ├── .env.example
 ├── .env                        # gitignored
-├── turbo.json
-├── package.json                # Bun workspace root
-└── AGENTS.md                   # This file, to be kept updated
+├── package.json                # Bun workspace root (contains apps/web & packages/ui)
+└── AGENTS.md                   # Agent guidelines, kept updated
 ```
 
 **Naming conventions:**
-- All packages use `@bnb/` scope (e.g. `@bnb/db`, `@bnb/iam`, `@bnb/plugin-sdk`).
-- File names: `kebab-case` for all files and directories.
-- TypeScript: strict mode everywhere, no `any` — use `unknown` and narrow.
-- Exports: each package has a single `src/index.ts` barrel export.
-- No barrel re-export chains deeper than one level.
+- TypeScript packages use `@bnb/` scope (e.g. `@bnb/ui`).
+- Python code follows PEP 8 styling conventions (directories and file names: `snake_case`).
+- TypeScript files: `kebab-case`.
 
 ***
 
-## Technology Versions (verify with `bunx skills find` before pinning)
+## Technology Versions
 
 | Layer | Technology |
 |---|---|
-| Runtime | Bun (latest stable) |
-| Monorepo | Bun workspaces + Turborepo |
+| Runtime (Frontend) | Bun (latest stable) |
+| Runtime (Backend) | Python 3.11 / 3.12 |
+| Package Manager (FE) | Bun workspaces |
+| Package Manager (BE) | uv (Astral) |
 | Frontend | Next.js 15 App Router, React 19, TypeScript |
-| Backend | Fastify 5, TypeScript |
+| Backend | FastAPI 0.111+, Pydantic v2, Python |
 | Database | PostgreSQL 16 (Docker container) |
-| ORM | Drizzle ORM + drizzle-kit |
+| ORM (Backend) | SQLAlchemy 2.0 (asyncpg) + Alembic migrations |
 | Auth (web) | NextAuth.js v5 (Auth.js) with Discord provider |
-| Auth (API) | Fastify session + JWT for API-to-API |
-| Bot integration | HTTP contract only (existing discord.js bot calls the API) |
-| Event bus | EventEmitter (in-process) + optional Redis pub/sub (same Redis container) |
+| Auth (API) | NextAuth JWT verification using public keys / shared `NEXTAUTH_SECRET` |
+| Bot integration | HTTP contract (existing bot signs webhooks with `API_INTERNAL_SECRET`) |
+| Event bus | Internal Asyncio PubSub + optional Redis pub/sub (same Redis container) |
 | Containerization | Docker + Docker Compose |
-| Component library | Radix UI primitives + Tailwind CSS (shared via `@bnb/ui`) |
+| Component library | Radix UI primitives + Tailwind CSS (shared via `@bnb/ui` with Shadcn) |
 
 ***
 
@@ -338,43 +350,37 @@ Meeting recording voice channels use role-scoping variables to dynamically estab
 
 ## Phase 0 — Repository Scaffolding
 
-### 0.1 Initialize the Workspace
-
+### 0.1 Initialize the Bun Monorepo (Frontend & Shared UI)
+Initialize Bun at the monorepo root to orchestrate the Next.js app and TypeScript package workspaces:
 ```bash
-# From an empty directory named bnb-motherboard
 bun init -y
 ```
 
-Edit `package.json` to set up Bun workspaces:
-
+Configure `package.json` to configure the TypeScript/Next.js workspaces:
 ```json
 {
   "name": "bnb-motherboard",
   "private": true,
   "workspaces": [
-    "apps/*",
-    "packages/*",
+    "apps/web",
+    "packages/ui",
     "plugins/*"
   ],
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "db:generate": "turbo run db:generate --filter=@bnb/db",
-    "db:migrate": "turbo run db:migrate --filter=@bnb/db",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint"
   }
 }
 ```
 
-Install Turborepo:
-
+Install Turborepo locally:
 ```bash
 bun add -D turbo
 ```
 
-Create `turbo.json`:
-
+Configure `turbo.json`:
 ```json
 {
   "$schema": "https://turbo.build/schema.json",
@@ -390,54 +396,43 @@ Create `turbo.json`:
     "typecheck": {
       "dependsOn": ["^build"]
     },
-    "lint": {},
-    "db:generate": { "cache": false },
-    "db:migrate": { "cache": false }
+    "lint": {}
   }
 }
 ```
 
-### 0.2 Create the Root `.env.example`
-
-Copy the secrets table from the "Required Secrets" section above into `.env.example` with placeholder values. Add `.env` to `.gitignore`.
-
-### 0.3 Create Shared TypeScript Config
-
-Create `tsconfig.base.json` at the root:
-
-```json
-{
-  "compilerOptions": {
-    "strict": true,
-    "exactOptionalPropertyTypes": true,
-    "noUncheckedIndexedAccess": true,
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "resolveJsonModule": true
-  }
-}
-```
-
-Every `apps/` and `packages/` directory extends this base.
-
-### 0.4 Create All Package Directories
-
+### 0.2 Initialize the Python / uv Workspace (Backend)
+Set up the `apps/api` directory as an independent Python package managed by `uv`:
 ```bash
-mkdir -p apps/web apps/api
-mkdir -p packages/db packages/iam packages/provisioning packages/events packages/plugin-sdk packages/ui
-mkdir -p plugins
-mkdir -p docker
+cd apps/api
+uv init --app app
 ```
 
-Each package needs a minimal `package.json` with the `@bnb/` scope and a `tsconfig.json` that extends `../../tsconfig.base.json`.
+This creates a `pyproject.toml` in `apps/api/`. Add the required python dependencies:
+```toml
+[project]
+name = "bnb-api"
+version = "0.1.0"
+description = "FastAPI backend core for the bnb-motherboard platform"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.30.1",
+    "pydantic[email]>=2.7.4",
+    "pydantic-settings>=2.3.4",
+    "sqlalchemy[asyncio]>=2.0.31",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.1",
+    "python-jose[cryptography]>=3.3.0",
+    "httpx>=0.27.0",
+    "redis>=5.0.6",
+    "apscheduler>=3.10.4",
+]
+```
 
-### 0.5 Docker Compose (Base)
-
-Create `docker-compose.yml`:
-
+### 0.3 Docker Compose configuration
+Create a central `docker-compose.yml` in the root mapping the services:
 ```yaml
 version: "3.9"
 services:
@@ -466,9 +461,9 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgres://bnb:${POSTGRES_PASSWORD:-changeme}@postgres:5432/motherboard
+      DATABASE_URL: postgresql+asyncpg://bnb:${POSTGRES_PASSWORD:-changeme}@postgres:5432/motherboard
     ports:
-      - "4000:4000"
+      - "8000:8000"
     depends_on:
       - postgres
       - redis
@@ -480,7 +475,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      API_URL: http://api:4000
+      API_URL: http://api:8000
     ports:
       - "3000:3000"
     depends_on:
@@ -490,830 +485,784 @@ volumes:
   postgres_data:
 ```
 
-Create placeholder Dockerfiles in `docker/`. Full content is written in Phase 5.
-
 ***
 
-## Phase 1 — Database Schema (`@bnb/db`)
+## Phase 1 — Database Schema (`apps/api/app/db`)
 
-> **Search context 7** before writing schema. Verify Drizzle ORM's current API for PostgreSQL — particularly `pgTable`, relation helpers, and `drizzle-kit` config format.
+Backend database logic is mapped using **SQLAlchemy 2.0 declarative tables** with type annotations. Asyncpg serves as the async driver.
 
-### 1.1 Install Dependencies
+### 1.1 ORM Table Definitions
 
+Create `apps/api/app/db/models.py`. Ensure all relationships are fully declared using `relationship()` with appropriate cascade properties:
+
+```python
+import uuid
+from datetime import datetime
+from typing import Any, List, Optional
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+class Base(DeclarativeBase):
+    pass
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    display_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_super_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    discord_account: Mapped[Optional["DiscordAccount"]] = relationship("DiscordAccount", back_populates="user", cascade="all, delete-orphan")
+    memberships: Mapped[List["Membership"]] = relationship("Membership", back_populates="user", cascade="all, delete-orphan")
+
+class DiscordAccount(Base):
+    __tablename__ = "discord_accounts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    discord_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
+    username: Mapped[str] = mapped_column(String(100), nullable=False)
+    discriminator: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
+    avatar_hash: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    access_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    refresh_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user: Mapped["User"] = relationship("User", back_populates="discord_account")
+
+class Group(Base):
+    __tablename__ = "groups"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    memberships: Mapped[List["Membership"]] = relationship("Membership", back_populates="group", cascade="all, delete-orphan")
+    role_mappings: Mapped[List["DiscordRoleMapping"]] = relationship("DiscordRoleMapping", back_populates="group", cascade="all, delete-orphan")
+
+class Membership(Base):
+    __tablename__ = "memberships"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    group_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("groups.id", ondelete="CASCADE"), nullable=False)
+    source: Mapped[str] = mapped_column(String(50), default="manual")  # 'discord_sync' | 'manual' | 'provisioning'
+    granted_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped["User"] = relationship("User", back_populates="memberships", foreign_keys=[user_id])
+    group: Mapped["Group"] = relationship("Group", back_populates="memberships")
+
+    __table_args__ = (UniqueConstraint("user_id", "group_id", name="uq_user_group"),)
+
+class DiscordRoleMapping(Base):
+    __tablename__ = "discord_role_mappings"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    discord_role_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
+    discord_role_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    group_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("groups.id", ondelete="CASCADE"), nullable=False)
+    sync_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    group: Mapped["Group"] = relationship("Group", back_populates="role_mappings")
+
+class Permission(Base):
+    __tablename__ = "permissions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    plugin_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # Null means core permission
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+class Grant(Base):
+    __tablename__ = "grants"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    principal_type: Mapped[str] = mapped_column(String(20), nullable=False)  # 'user' | 'group'
+    principal_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    permission_key: Mapped[str] = mapped_column(String(100), ForeignKey("permissions.key", ondelete="CASCADE"), nullable=False)
+    resource_scope: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # Null means global/wildcard scope
+    granted_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+class Delegation(Base):
+    __tablename__ = "delegations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    delegator_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    delegatee_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    permission_key: Mapped[str] = mapped_column(String(100), ForeignKey("permissions.key", ondelete="CASCADE"), nullable=False)
+    delegation_ref: Mapped[str] = mapped_column(Text, nullable=False)  # Written authority reference
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    actor_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    target_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSONB, name="metadata", default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+class PluginRegistry(Base):
+    __tablename__ = "plugin_registry"
+
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)  # Declared plugin ID (e.g., 'org.bnb.tasks')
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    version: Mapped[str] = mapped_column(String(20), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    installed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+```
+
+### 1.2 Alembic Setup and Migrations
+Initialize Alembic inside `apps/api/`:
 ```bash
-cd packages/db
-bun add drizzle-orm postgres
-bun add -D drizzle-kit
+uv run alembic init alembic
 ```
 
-### 1.2 Package Structure
-
-```
-packages/db/
-├── src/
-│   ├── schema/
-│   │   ├── users.ts
-│   │   ├── discord-accounts.ts
-│   │   ├── groups.ts
-│   │   ├── memberships.ts
-│   │   ├── discord-role-mappings.ts
-│   │   ├── permissions.ts
-│   │   ├── grants.ts
-│   │   ├── delegations.ts
-│   │   ├── audit-log.ts
-│   │   ├── plugin-registry.ts
-│   │   └── index.ts          # re-exports all tables
-│   ├── client.ts             # Drizzle client singleton
-│   ├── migrate.ts            # migration runner script
-│   └── index.ts
-├── drizzle.config.ts
-└── package.json
+Modify `alembic/env.py` to point to the base metadata:
+```python
+from app.db.models import Base
+target_metadata = Base.metadata
 ```
 
-### 1.3 Schema Definitions
-
-**`src/schema/users.ts`**
-```typescript
-import { pgTable, uuid, text, timestamp, boolean } from 'drizzle-orm/pg-core';
-
-export const users = pgTable('users', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  displayName: text('display_name').notNull(),
-  email: text('email'),
-  avatarUrl: text('avatar_url'),
-  isActive: boolean('is_active').notNull().default(true),
-  isSuperAdmin: boolean('is_super_admin').notNull().default(false),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
-```
-
-**`src/schema/discord-accounts.ts`**
-```typescript
-import { pgTable, uuid, text, timestamp } from 'drizzle-orm/pg-core';
-import { users } from './users';
-
-export const discordAccounts = pgTable('discord_accounts', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  discordId: text('discord_id').notNull().unique(),
-  username: text('username').notNull(),
-  discriminator: text('discriminator'),
-  avatarHash: text('avatar_hash'),
-  accessToken: text('access_token'),
-  refreshToken: text('refresh_token'),
-  tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
-  lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export type DiscordAccount = typeof discordAccounts.$inferSelect;
-```
-
-**`src/schema/groups.ts`**
-```typescript
-import { pgTable, uuid, text, timestamp, boolean } from 'drizzle-orm/pg-core';
-
-export const groups = pgTable('groups', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull().unique(),
-  description: text('description'),
-  isSystem: boolean('is_system').notNull().default(false), // system groups cannot be deleted
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export type Group = typeof groups.$inferSelect;
-```
-
-**`src/schema/memberships.ts`**
-- Join table: `user_id` → `group_id`, with `grantedBy` (user_id nullable), `grantedAt`, `expiresAt` (nullable), `source` enum `('discord_sync' | 'manual' | 'provisioning')`.
-
-**`src/schema/discord-role-mappings.ts`**
-- Columns: `id`, `discordRoleId` (text, unique), `discordRoleName` (text), `groupId` (uuid → groups), `syncEnabled` (boolean), `createdAt`, `updatedAt`.
-- This is the table the admin UI writes to when mapping Discord roles to internal groups.
-
-**`src/schema/permissions.ts`**
-- Columns: `id`, `key` (text, unique — e.g. `"iam.users.write"`), `description`, `pluginId` (nullable text — null means core), `createdAt`.
-
-**`src/schema/grants.ts`**
-- Maps a principal (user or group) to a permission key, with a resource scope (nullable), granted by whom, and when it expires.
-- Columns: `id`, `principalType` (`'user' | 'group'`), `principalId` (uuid), `permissionKey` (text → permissions.key), `resourceScope` (text nullable), `grantedBy` (uuid → users), `expiresAt` (timestamp nullable), `createdAt`.
-
-**`src/schema/delegations.ts`**
-- Delegation records allowing one principal to delegate a subset of their permissions to another principal, with a written delegation reference.
-- Columns: `id`, `delegatorId`, `delegateeId`, `permissionKey`, `delegationRef` (text — written authority reference), `expiresAt`, `createdAt`.
-
-**`src/schema/audit-log.ts`**
-- Append-only. Never updated or deleted.
-- Columns: `id` (uuid), `actorId` (uuid nullable — null for system events), `action` (text — e.g. `"user.created"`, `"group.member.added"`), `targetType` (text), `targetId` (text), `metadata` (jsonb), `createdAt`.
-
-**`src/schema/plugin-registry.ts`**
-- Columns: `id` (text — plugin's declared ID, unique), `name`, `version`, `description`, `isEnabled` (boolean), `installedAt`, `config` (jsonb).
-
-### 1.4 Drizzle Config
-
-**`drizzle.config.ts`**:
-```typescript
-import { defineConfig } from 'drizzle-kit';
-
-export default defineConfig({
-  schema: './src/schema/index.ts',
-  out: './migrations',
-  dialect: 'postgresql',
-  dbCredentials: {
-    url: process.env.DATABASE_URL!,
-  },
-});
-```
-
-### 1.5 Client Singleton
-
-**`src/client.ts`**:
-```typescript
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
-import * as schema from './schema';
-
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) throw new Error('DATABASE_URL is required');
-
-const sql = postgres(connectionString);
-export const db = drizzle(sql, { schema });
-export type Db = typeof db;
-```
-
-### 1.6 Generate and Run Initial Migration
-
+Generate migrations:
 ```bash
-cd packages/db
-bunx drizzle-kit generate
-bunx drizzle-kit migrate
-```
-
-Commit the generated migration files.
-
-***
-
-## Phase 2 — IAM Package (`@bnb/iam`)
-
-> **Search context 7** to verify your schema types from Phase 1 are accurately reflected here before writing policy logic.
-
-The IAM package is the single source of truth for "can this principal do this action on this resource?" It has no HTTP layer — it is imported by the API and evaluated per-request.
-
-### 2.1 Package Structure
-
-```
-packages/iam/
-├── src/
-│   ├── principal.ts        # Resolve a user's effective groups and permissions
-│   ├── policy.ts           # can(principal, permissionKey, resourceScope?) → boolean
-│   ├── audit.ts            # writeAuditEntry(...)
-│   ├── system-groups.ts    # Seed constants for built-in groups
-│   └── index.ts
-└── package.json
-```
-
-### 2.2 Principal Resolution
-
-**`src/principal.ts`**
-
-```typescript
-import { db } from '@bnb/db';
-import { memberships, grants, users } from '@bnb/db/schema';
-import { eq } from 'drizzle-orm';
-
-export type ResolvedPrincipal = {
-  userId: string;
-  groupIds: string[];
-  isSuperAdmin: boolean;
-};
-
-/**
- * Resolves all groups a user belongs to.
- * Call this once per request and cache the result in the request context.
- */
-export async function resolvePrincipal(userId: string): Promise<ResolvedPrincipal> {
-  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
-  if (!user || !user.isActive) throw new Error('User not found or inactive');
-
-  const userMemberships = await db.query.memberships.findMany({
-    where: eq(memberships.userId, userId),
-  });
-
-  return {
-    userId,
-    groupIds: userMemberships.map((m) => m.groupId),
-    isSuperAdmin: user.isSuperAdmin,
-  };
-}
-```
-
-### 2.3 Policy Evaluator
-
-**`src/policy.ts`**
-
-```typescript
-import { db } from '@bnb/db';
-import { grants } from '@bnb/db/schema';
-import { and, eq, inArray, or, isNull, gt } from 'drizzle-orm';
-import type { ResolvedPrincipal } from './principal';
-
-/**
- * Evaluates whether the resolved principal holds the given permission,
- * optionally scoped to a specific resource.
- *
- * Super admins bypass all permission checks.
- */
-export async function can(
-  principal: ResolvedPrincipal,
-  permissionKey: string,
-  resourceScope?: string,
-): Promise<boolean> {
-  if (principal.isSuperAdmin) return true;
-
-  const now = new Date();
-
-  // Build principal conditions: user direct grants OR any of their group grants
-  const principalConditions = or(
-    and(eq(grants.principalType, 'user'), eq(grants.principalId, principal.userId)),
-    ...(principal.groupIds.length > 0
-      ? [and(eq(grants.principalType, 'group'), inArray(grants.principalId, principal.groupIds))]
-      : []),
-  );
-
-  const matchingGrants = await db.query.grants.findMany({
-    where: and(
-      principalConditions,
-      eq(grants.permissionKey, permissionKey),
-      or(isNull(grants.expiresAt), gt(grants.expiresAt, now)),
-    ),
-  });
-
-  if (matchingGrants.length === 0) return false;
-
-  // If no resourceScope required, any grant suffices
-  if (!resourceScope) return true;
-
-  // Otherwise, at least one grant must have null scope (wildcard) or match exactly
-  return matchingGrants.some(
-    (g) => g.resourceScope === null || g.resourceScope === resourceScope,
-  );
-}
-```
-
-### 2.4 Audit Writer
-
-**`src/audit.ts`**
-
-```typescript
-import { db } from '@bnb/db';
-import { auditLog } from '@bnb/db/schema';
-
-export async function writeAuditEntry(entry: {
-  actorId?: string;
-  action: string;
-  targetType: string;
-  targetId: string;
-  metadata?: Record<string, unknown>;
-}): Promise<void> {
-  await db.insert(auditLog).values({
-    actorId: entry.actorId ?? null,
-    action: entry.action,
-    targetType: entry.targetType,
-    targetId: entry.targetId,
-    metadata: entry.metadata ?? {},
-  });
-}
-```
-
-### 2.5 System Groups Seed
-
-**`src/system-groups.ts`**
-
-Define constant IDs for system groups that are created on first boot:
-
-```typescript
-export const SYSTEM_GROUPS = {
-  SUPER_ADMIN: 'sg_super_admin',
-  STAFF: 'sg_staff',
-  FORK_LEAD: 'sg_fork_lead',
-  CONTRIBUTOR: 'sg_contributor',
-  MEMBER: 'sg_member',
-} as const;
-```
-
-The API server seeds these groups on startup if they do not exist.
-
-***
-
-## Phase 3 — Event Bus (`@bnb/events`)
-
-### 3.1 Typed Event Definitions
-
-```
-packages/events/
-├── src/
-│   ├── event-types.ts      # All event type definitions
-│   ├── bus.ts              # EventEmitter-based bus
-│   └── index.ts
-└── package.json
-```
-
-**`src/event-types.ts`** — define a discriminated union:
-
-```typescript
-export type MothboardEvent =
-  | { type: 'user.created'; payload: { userId: string } }
-  | { type: 'user.deactivated'; payload: { userId: string } }
-  | { type: 'group.member.added'; payload: { userId: string; groupId: string; source: string } }
-  | { type: 'group.member.removed'; payload: { userId: string; groupId: string } }
-  | { type: 'discord.sync.completed'; payload: { syncedCount: number; errors: string[] } }
-  | { type: 'discord.role.mapped'; payload: { discordRoleId: string; groupId: string } }
-  | { type: 'plugin.registered'; payload: { pluginId: string } }
-  | { type: 'plugin.unregistered'; payload: { pluginId: string } };
-```
-
-**`src/bus.ts`** — Typed EventEmitter wrapper:
-
-```typescript
-import { EventEmitter } from 'node:events';
-import type { MothboardEvent } from './event-types';
-
-class MotherboardEventBus extends EventEmitter {
-  emit<E extends MothboardEvent>(event: E): boolean {
-    return super.emit(event.type, event.payload);
-  }
-
-  on<T extends MothboardEvent['type']>(
-    event: T,
-    listener: (payload: Extract<MothboardEvent, { type: T }>['payload']) => void,
-  ): this {
-    return super.on(event, listener);
-  }
-}
-
-export const bus = new MotherboardEventBus();
+uv run alembic revision --autogenerate -m "initial schema"
+uv run alembic upgrade head
 ```
 
 ***
 
-## Phase 4 — Plugin SDK (`@bnb/plugin-sdk`)
+## Phase 2 — IAM Module (`apps/api/app/iam`)
 
-This is the most important package in the system. It is the contract between the core and every plugin — first-party or third-party. Document it fully in a `README.md` inside the package.
+The IAM module evaluates user/group permissions using async session engines.
 
-> **Search context 7** before writing plugin loading logic in the API to confirm Fastify 5's plugin system (`fastify-plugin`, `register`) works as described here.
+### 2.1 Principal Resolution
+Create `apps/api/app/iam/principal.py`:
+```python
+import uuid
+from typing import List
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.models import User, Membership
 
-### 4.1 Package Structure
+class ResolvedPrincipal(BaseModel):
+    user_id: uuid.UUID
+    group_ids: List[uuid.UUID]
+    is_super_admin: bool
 
-```
-packages/plugin-sdk/
-├── src/
-│   ├── types.ts             # All public types a plugin author uses
-│   ├── define-plugin.ts     # definePlugin() factory
-│   ├── plugin-context.ts    # Context object passed to plugin lifecycle hooks
-│   ├── ui-manifest.ts       # UI registration contract
-│   ├── event-contract.ts    # Event bus subscription helpers
-│   ├── permission-contract.ts # Permission declaration helpers
-│   └── index.ts
-├── README.md
-└── package.json
-```
-
-### 4.2 Plugin Manifest Type
-
-**`src/types.ts`**
-
-```typescript
-import type { FastifyInstance } from 'fastify';
-import type { Db } from '@bnb/db';
-import type { MothboardEvent } from '@bnb/events';
-
-/**
- * The context object passed to every plugin lifecycle hook.
- * Provides safe, scoped access to core infrastructure.
- */
-export type PluginContext = {
-  /** Drizzle database client. Plugin may run its own migrations here. */
-  db: Db;
-  /** Plugin's declared ID. Used for namespacing routes and tables. */
-  pluginId: string;
-  /** Evaluates a permission for a given user. Core delegates to @bnb/iam. */
-  can: (userId: string, permissionKey: string, resourceScope?: string) => Promise<boolean>;
-  /** Write a structured audit log entry. */
-  audit: (entry: {
-    actorId?: string;
-    action: string;
-    targetType: string;
-    targetId: string;
-    metadata?: Record<string, unknown>;
-  }) => Promise<void>;
-  /** Emit a typed event to the event bus. */
-  emit: <E extends MothboardEvent>(event: E) => void;
-  /** Subscribe to a typed event from the event bus. */
-  on: <T extends MothboardEvent['type']>(
-    event: T,
-    listener: (payload: Extract<MothboardEvent, { type: T }>['payload']) => void,
-  ) => void;
-};
-
-/**
- * A declared permission that the plugin owns.
- * Permissions are keyed as `<pluginId>.<resource>.<action>`.
- */
-export type PermissionDeclaration = {
-  key: string;
-  description: string;
-};
-
-/**
- * A UI panel registration.
- * The plugin declares panel metadata; the Next.js shell lazy-loads
- * the panel's React component from the plugin's published package.
- */
-export type UiPanelDeclaration = {
-  /** Unique panel ID within this plugin. */
-  id: string;
-  /** Human-readable panel title shown in navigation. */
-  title: string;
-  /**
-   * The route path segment this panel mounts at.
-   * E.g. "tasks" → renders at /plugins/tasks
-   */
-  routeSegment: string;
-  /**
-   * Navigation placement: 'sidebar' shows a persistent link.
-   * 'modal' means the panel is opened programmatically.
-   * 'embedded' means it is injected into a core page slot.
-   */
-  placement: 'sidebar' | 'modal' | 'embedded';
-  /**
-   * The permission key required to see this panel.
-   * If null, any authenticated user can see it.
-   */
-  requiredPermission: string | null;
-  /**
-   * Icon identifier from the shared icon set (Lucide icon name).
-   */
-  icon: string;
-};
-
-/**
- * A plugin migration function.
- * Receives the raw Drizzle db instance.
- * Must be idempotent (safe to run multiple times).
- */
-export type MigrationFn = (db: Db) => Promise<void>;
-
-/**
- * The full plugin manifest.
- * Returned by definePlugin().
- */
-export type PluginManifest = {
-  /** Globally unique. Use reverse-domain style: "org.bnb.tasks" */
-  id: string;
-  name: string;
-  version: string;
-  description: string;
-  /**
-   * Called once when the plugin is loaded.
-   * Register Fastify routes, listeners, etc. here.
-   * Routes are automatically prefixed with /api/plugins/<pluginId>.
-   */
-  onLoad: (fastify: FastifyInstance, ctx: PluginContext) => Promise<void>;
-  /**
-   * Called once when the plugin is unloaded (server shutdown or admin disable).
-   */
-  onUnload?: (ctx: PluginContext) => Promise<void>;
-  /**
-   * Database migration functions run before onLoad.
-   * Must be idempotent.
-   */
-  migrations?: MigrationFn[];
-  /**
-   * Permissions this plugin declares.
-   * Core will create these in the permissions table on load if missing.
-   */
-  permissions?: PermissionDeclaration[];
-  /**
-   * UI panels this plugin contributes to the web dashboard.
-   */
-  uiPanels?: UiPanelDeclaration[];
-  /**
-   * Event types this plugin emits (documentation only — for tooling/introspection).
-   */
-  emits?: MothboardEvent['type'][];
-  /**
-   * Event types this plugin subscribes to.
-   * Subscriptions are registered automatically during onLoad.
-   */
-  subscribes?: MothboardEvent['type'][];
-};
+async def resolve_principal(db: AsyncSession, user_id: uuid.UUID) -> ResolvedPrincipal:
+    user_stmt = select(User).where(User.id == user_id)
+    user_res = await db.execute(user_stmt)
+    user = user_res.scalar_one_or_none()
+    
+    if not user or not user.is_active:
+        raise ValueError("User not found or deactivated")
+        
+    membership_stmt = select(Membership.group_id).where(Membership.user_id == user_id)
+    membership_res = await db.execute(membership_stmt)
+    group_ids = list(membership_res.scalars().all())
+    
+    return ResolvedPrincipal(
+        user_id=user.id,
+        group_ids=group_ids,
+        is_super_admin=user.is_super_admin
+    )
 ```
 
-### 4.3 `definePlugin` Factory
+### 2.2 Policy Evaluator
+Create `apps/api/app/iam/policy.py`:
+```python
+from datetime import datetime, timezone
+from typing import Optional
+from sqlalchemy import select, and_, or_, is_
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.models import Grant
+from .principal import ResolvedPrincipal
 
-**`src/define-plugin.ts`**
-
-```typescript
-import type { PluginManifest } from './types';
-
-/**
- * Type-safe factory for declaring a plugin.
- * Provides autocomplete and compile-time validation of the manifest.
- *
- * @example
- * export default definePlugin({
- *   id: 'org.bnb.tasks',
- *   name: 'Tasks',
- *   version: '1.0.0',
- *   description: 'Task management for the bnb network',
- *   async onLoad(fastify, ctx) {
- *     fastify.get('/list', async (req, reply) => { ... });
- *   },
- *   permissions: [
- *     { key: 'org.bnb.tasks.task.read', description: 'View tasks' },
- *     { key: 'org.bnb.tasks.task.write', description: 'Create and update tasks' },
- *   ],
- *   uiPanels: [
- *     {
- *       id: 'main',
- *       title: 'Tasks',
- *       routeSegment: 'tasks',
- *       placement: 'sidebar',
- *       requiredPermission: 'org.bnb.tasks.task.read',
- *       icon: 'CheckSquare',
- *     },
- *   ],
- * });
- */
-export function definePlugin(manifest: PluginManifest): PluginManifest {
-  return manifest;
-}
+async def can(
+    db: AsyncSession,
+    principal: ResolvedPrincipal,
+    permission_key: str,
+    resource_scope: Optional[str] = None
+) -> bool:
+    if principal.is_super_admin:
+        return True
+        
+    now = datetime.now(timezone.utc)
+    
+    # User-direct or group-level grants conditions
+    principal_conditions = [
+        and_(Grant.principal_type == "user", Grant.principal_id == principal.user_id)
+    ]
+    if principal.group_ids:
+        principal_conditions.append(
+            and_(Grant.principal_type == "group", Grant.principal_id.in_(principal.group_ids))
+        )
+        
+    grant_filter = and_(
+        or_(*principal_conditions),
+        Grant.permission_key == permission_key,
+        or_(is_(Grant.expires_at, None), Grant.expires_at > now)
+    )
+    
+    stmt = select(Grant).where(grant_filter)
+    res = await db.execute(stmt)
+    matching_grants = res.scalars().all()
+    
+    if not matching_grants:
+        return False
+        
+    if not resource_scope:
+        return True
+        
+    # Grant matches if it has a null resource_scope (global wildcard) or matches exactly
+    return any(g.resource_scope is None or g.resource_scope == resource_scope for g in matching_grants)
 ```
 
-### 4.4 UI Component Contract
-
-Plugins that provide UI panels must:
-
-1. Export a default React component from their package's `ui` entry point (declared in their `package.json` `exports` map as `"./ui"`).
-2. The component receives a `PluginPanelProps` object:
-
-```typescript
-// In @bnb/plugin-sdk
-export type PluginPanelProps = {
-  /** The current authenticated user's ID */
-  userId: string;
-  /** A pre-authenticated fetch function scoped to this plugin's API routes */
-  apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
-};
-```
-
-3. The component **must use components from `@bnb/ui`** for all UI — it must not ship its own design system. Buttons, inputs, tables, dialogs — all from `@bnb/ui`.
-4. The Next.js shell dynamically imports the plugin's UI component using `next/dynamic` and wraps it in a `<Suspense>` boundary with a skeleton loader from `@bnb/ui`.
-
-### 4.5 Plugin Loader (used by API)
-
-Implement `packages/plugin-sdk/src/loader.ts`:
-
-```typescript
-/**
- * PluginLoader manages the lifecycle of all registered plugins.
- * It is instantiated once in the Fastify server and holds references
- * to all loaded plugin manifests and their contexts.
- */
-export class PluginLoader {
-  private loaded: Map<string, PluginManifest> = new Map();
-
-  async load(manifest: PluginManifest, fastify: FastifyInstance, ctx: PluginContext): Promise<void>;
-  async unload(pluginId: string, ctx: PluginContext): Promise<void>;
-  getLoaded(): PluginManifest[];
-  getUiPanels(): UiPanelDeclaration[];  // Used by the web API endpoint for nav
+### 2.3 System Groups Seeds
+Create `apps/api/app/iam/constants.py`:
+```python
+SYSTEM_GROUPS = {
+    "SUPER_ADMIN": "sg_super_admin",
+    "STAFF": "sg_staff",
+    "FORK_LEAD": "sg_fork_lead",
+    "CONTRIBUTOR": "sg_contributor",
+    "MEMBER": "sg_member"
 }
 ```
 
 ***
 
-## Phase 5 — Provisioning Worker (`@bnb/provisioning`)
+## Phase 3 — Event Bus (`apps/api/app/events`)
 
-> **Search context 7** before implementing the Discord API calls. Verify the `discord.js` REST client or `undici` usage for guild member fetching with the `guilds.members.read` scope. Do not guess at rate limit behavior.
+The internal events module handles async signaling between modules, with an optional Redis Pub/Sub backend for multi-instance deployments.
 
-### 5.1 What the Worker Does
+### 3.1 Typed Event Schemas
+Create `apps/api/app/events/types.py`:
+```python
+from typing import Any, Dict, Literal, Union
+from pydantic import BaseModel
 
-1. Fetches all members of the configured Discord guild using the bot token.
-2. For each member, looks up their `discordId` in `discord_accounts`.
-3. For each Discord role on the member, looks up the `discord_role_mappings` table.
-4. If a mapping exists and `syncEnabled = true`, ensures the user is in the mapped internal group.
-5. Removes a user from a group if they no longer have the mapped Discord role.
-6. Emits `discord.sync.completed` after each run.
-7. Writes audit entries for every group membership change.
+class UserCreatedPayload(BaseModel):
+    user_id: str
 
-### 5.2 Package Structure
+class GroupMemberAddedPayload(BaseModel):
+    user_id: str
+    group_id: str
+    source: str
 
-```
-packages/provisioning/
-├── src/
-│   ├── discord-client.ts   # Thin wrapper around Discord REST API
-│   ├── sync-worker.ts      # Main sync logic
-│   ├── scheduler.ts        # Setinterval-based scheduler (or node-cron)
-│   └── index.ts
-└── package.json
-```
+class DiscordSyncCompletedPayload(BaseModel):
+    synced_count: int
+    errors: list[str]
 
-### 5.3 Discord Client
-
-**`src/discord-client.ts`** — use `undici` (Bun-native) or the `@discordjs/rest` package. Do NOT use `node-fetch`. Implement:
-
-- `getGuildMembers(guildId: string): Promise<GuildMember[]>` — paginates through all guild members using the `after` query parameter. Each page is 1000 members.
-- `getRoles(guildId: string): Promise<Role[]>` — fetches current role list for display name sync.
-
-`GuildMember` type:
-```typescript
-type GuildMember = {
-  user: { id: string; username: string; avatar: string | null };
-  roles: string[]; // array of role IDs
-  nick: string | null;
-};
+class Event(BaseModel):
+    type: Literal["user.created", "group.member.added", "discord.sync.completed"]
+    payload: Dict[str, Any]
 ```
 
-### 5.4 Sync Logic
+### 3.2 Event Bus Implementation
+Create `apps/api/app/events/bus.py`:
+```python
+import asyncio
+import json
+import logging
+from typing import Any, Callable, Coroutine, Dict, List, Optional
+import redis.asyncio as aioredis
 
-**`src/sync-worker.ts`**
+logger = logging.getLogger("event_bus")
 
-```typescript
-export async function runSync(): Promise<{ syncedCount: number; errors: string[] }> {
-  // 1. Fetch all guild members from Discord
-  // 2. Fetch all role mappings from db where syncEnabled = true
-  // 3. For each guild member:
-  //    a. Find matching internal user by discordId
-  //    b. If no match, skip (user has not logged in yet)
-  //    c. For each of the user's Discord roles:
-  //       - If role has a mapping, ensure user is in that group
-  //    d. For each group the user is in with source='discord_sync':
-  //       - If the mapped Discord role is no longer present, remove them
-  // 4. Update lastSyncedAt on discord_accounts
-  // 5. Emit discord.sync.completed
-}
+class EventBus:
+    def __init__(self, redis_url: Optional[str] = None):
+        self._listeners: Dict[str, List[Callable[[Dict[str, Any]], Coroutine[Any, Any, None]]]] = {}
+        self.redis_url = redis_url
+        self.redis: Optional[aioredis.Redis] = None
+        self._pubsub_task: Optional[asyncio.Task] = None
+
+    async def start(self):
+        if self.redis_url:
+            self.redis = aioredis.from_url(self.redis_url, decode_responses=True)
+            self._pubsub_task = asyncio.create_task(self._redis_listener())
+
+    async def _redis_listener(self):
+        pubsub = self.redis.pubsub()
+        await pubsub.subscribe("motherboard_events")
+        async for message in pubsub.listen():
+            if message["type"] == "message":
+                data = json.loads(message["data"])
+                await self._trigger_local(data["type"], data["payload"])
+
+    def subscribe(self, event_type: str, callback: Callable[[Dict[str, Any]], Coroutine[Any, Any, None]]):
+        if event_type not in self._listeners:
+            self._listeners[event_type] = []
+        self._listeners[event_type].append(callback)
+
+    async def publish(self, event_type: str, payload: Dict[str, Any]):
+        event_data = {"type": event_type, "payload": payload}
+        # Trigger local execution
+        await self._trigger_local(event_type, payload)
+        # Push to Redis for cross-node instances
+        if self.redis:
+            await self.redis.publish("motherboard_events", json.dumps(event_data))
+
+    async def _trigger_local(self, event_type: str, payload: Dict[str, Any]):
+        callbacks = self._listeners.get(event_type, [])
+        for cb in callbacks:
+            try:
+                asyncio.create_task(cb(payload))
+            except Exception as e:
+                logger.error(f"Error executing subscriber callback for {event_type}: {e}")
+
+event_bus = EventBus()
 ```
-
-All membership changes must:
-- Write an audit entry via `@bnb/iam`'s `writeAuditEntry`.
-- Emit `group.member.added` or `group.member.removed` on the event bus.
-
-### 5.5 Scheduler
-
-Run the sync on a schedule using `node-cron` or a simple `setInterval`. The interval is configurable via `SYNC_INTERVAL_MINUTES` env variable (default: 15). The scheduler is started inside the API server's `onReady` hook, not as a separate process, to keep the Docker service count minimal.
 
 ***
 
-## Phase 6 — Fastify API (`apps/api`)
+## Phase 4 — Plugin SDK (`apps/api/app/plugin_sdk`)
 
-> **Search context 7** before implementing Fastify plugins, decorators, and route schemas. Verify Fastify 5 breaking changes from Fastify 4 — particularly typed request/reply generics.
+The plugin platform allows Python packages to register routes and logic with the motherboard backend, while their React counterparts are loaded by the Next.js shell.
 
-### 6.1 Install Dependencies
+### 4.1 Plugin Lifecycle Contracts
+Create `apps/api/app/plugin_sdk/types.py`:
+```python
+from typing import Any, Callable, Coroutine, Dict, List, Literal, Optional
+from fastapi import APIRouter, FastAPI
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
-```bash
-cd apps/api
-bun add fastify @fastify/cookie @fastify/session @fastify/cors fastify-plugin
-bun add @bnb/db @bnb/iam @bnb/events @bnb/provisioning @bnb/plugin-sdk
-bun add -D @types/node
+class PluginContext(BaseModel):
+    plugin_id: str
+    db_session: AsyncSession
+    
+    # Core system wrappers
+    audit: Callable[[str, str, str, Dict[str, Any]], Coroutine[Any, Any, None]]
+    publish_event: Callable[[str, Dict[str, Any]], Coroutine[Any, Any, None]]
+    
+    model_config = {"arbitrary_types_allowed": True}
+
+class PermissionDeclaration(BaseModel):
+    key: str
+    description: str
+
+class UiPanelDeclaration(BaseModel):
+    id: str
+    title: str
+    route_segment: str
+    placement: Literal["sidebar", "modal", "embedded"]
+    required_permission: Optional[str] = None
+    icon: str
+
+class PluginManifest(BaseModel):
+    id: str
+    name: str
+    version: str
+    description: Optional[str] = None
+    
+    # Router instances to mount under /api/plugins/<plugin_id>
+    router: Optional[APIRouter] = None
+    
+    # Lifecycle hooks
+    on_load: Optional[Callable[[FastAPI, PluginContext], Coroutine[Any, Any, None]]] = None
+    on_unload: Optional[Callable[[PluginContext], Coroutine[Any, Any, None]]] = None
+    
+    permissions: List[PermissionDeclaration] = []
+    ui_panels: List[UiPanelDeclaration] = []
+    
+    model_config = {"arbitrary_types_allowed": True}
 ```
 
-### 6.2 Directory Structure
+### 4.2 Dynamic Plugin Loader
+The loader dynamically checks the `plugins/` directory, adds the directory to `sys.path`, loads the modules dynamically, runs any database schema updates declared in migrations, and mounts their FastAPI routers:
 
+Create `apps/api/app/plugin_sdk/loader.py`:
+```python
+import importlib
+import sys
+from pathlib import Path
+from typing import Dict, Any
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from .types import PluginManifest, PluginContext
+
+class PluginLoader:
+    def __init__(self, app: FastAPI, session_factory: async_sessionmaker, plugins_dir: str = "../../plugins"):
+        self.app = app
+        self.session_factory = session_factory
+        self.plugins_dir = Path(plugins_dir)
+        self.loaded_plugins: Dict[str, PluginManifest] = {}
+
+    async def discover_and_load(self):
+        if not self.plugins_dir.exists():
+            return
+
+        for p_dir in self.plugins_dir.iterdir():
+            if not p_dir.is_dir():
+                continue
+                
+            api_path = p_dir / "api"
+            if not api_path.exists():
+                continue
+                
+            # Add plugin api to path and load dynamic package
+            sys.path.insert(0, str(api_path.resolve()))
+            try:
+                plugin_module = importlib.import_module("main")
+                manifest: PluginManifest = plugin_module.get_manifest()
+                
+                await self.load_plugin(manifest)
+            except Exception as e:
+                print(f"Failed to load plugin from {p_dir}: {e}")
+            finally:
+                sys.path.pop(0)
+
+    async def load_plugin(self, manifest: PluginManifest):
+        # 1. Mount Router
+        if manifest.router:
+            self.app.include_router(
+                manifest.router,
+                prefix=f"/api/plugins/{manifest.id}",
+                tags=[f"plugin:{manifest.id}"]
+            )
+            
+        # 2. Run initial tasks via on_load hook
+        async with self.session_factory() as session:
+            ctx = PluginContext(
+                plugin_id=manifest.id,
+                db_session=session,
+                audit=self._make_audit_fn(manifest.id, session),
+                publish_event=self._make_publish_fn()
+            )
+            if manifest.on_load:
+                await manifest.on_load(self.app, ctx)
+                
+        self.loaded_plugins[manifest.id] = manifest
+
+    def _make_audit_fn(self, plugin_id: str, session: AsyncSession):
+        from app.iam.audit import write_audit_entry
+        async def audit_fn(action: str, target_type: str, target_id: str, meta: Dict[str, Any]):
+            await write_audit_entry(session, actor_id=None, action=f"plugin.{plugin_id}.{action}", target_type=target_type, target_id=target_id, metadata=meta)
+        return audit_fn
+
+    def _make_publish_fn(self):
+        from app.events.bus import event_bus
+        async def publish_fn(event_type: str, payload: Dict[str, Any]):
+            await event_bus.publish(event_type, payload)
+        return publish_fn
 ```
-apps/api/
-├── src/
-│   ├── server.ts               # Fastify instance creation + plugin registration
-│   ├── index.ts                # Entry point: start server
-│   ├── plugins/
-│   │   ├── auth.ts             # Session + JWT verification decorator
-│   │   ├── iam.ts              # Attaches resolvePrincipal and can to request
-│   │   └── plugin-loader.ts    # Loads and mounts plugin manifests
-│   ├── routes/
-│   │   ├── auth/
-│   │   │   ├── discord-oauth.ts   # OAuth callback handler
-│   │   │   └── session.ts         # GET /auth/me, POST /auth/logout
-│   │   ├── iam/
-│   │   │   ├── users.ts           # CRUD for users
-│   │   │   ├── groups.ts          # CRUD for groups
-│   │   │   ├── grants.ts          # Grant/revoke permissions
-│   │   │   └── discord-mappings.ts # UI-driven role mapping
-│   │   ├── provisioning/
-│   │   │   └── sync.ts            # POST /provisioning/sync (trigger manual sync)
-│   │   ├── plugins/
-│   │   │   └── manifest.ts        # GET /plugins/manifest (returns loaded plugins + UI panels)
-│   │   ├── audit/
-│   │   │   └── log.ts             # GET /audit (paginated)
-│   │   └── bot/
-│   │       └── webhook.ts         # POST /bot/webhook (signed with API_INTERNAL_SECRET)
-│   └── middleware/
-│       ├── require-auth.ts        # Prehandler: rejects unauthenticated requests
-│       └── require-permission.ts  # Prehandler factory: requires a permission key
-├── tsconfig.json
-└── package.json
+
+***
+
+## Phase 5 — Provisioning Worker (`apps/api/app/provisioning`)
+
+The provisioning worker fetches guild member mappings from Discord, compares them to mapped roles, and writes synchronization updates back to internal database groups.
+
+### 5.1 Discord REST Client
+Create `apps/api/app/provisioning/client.py`:
+```python
+from typing import Any, Dict, List
+import httpx
+
+class DiscordClient:
+    def __init__(self, bot_token: str):
+        self.bot_token = bot_token
+        self.base_url = "https://discord.com/api/v10"
+        self.headers = {"Authorization": f"Bot {self.bot_token}"}
+
+    async def get_guild_members(self, guild_id: str) -> List[Dict[str, Any]]:
+        members = []
+        limit = 1000
+        after = "0"
+        
+        async with httpx.AsyncClient(base_url=self.base_url, headers=self.headers) as client:
+            while True:
+                resp = await client.get(
+                    f"/guilds/{guild_id}/members",
+                    params={"limit": limit, "after": after}
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                if not data:
+                    break
+                members.extend(data)
+                after = data[-1]["user"]["id"]
+                if len(data) < limit:
+                    break
+        return members
+
+    async def get_roles(self, guild_id: str) -> List[Dict[str, Any]]:
+        async with httpx.AsyncClient(base_url=self.base_url, headers=self.headers) as client:
+            resp = await client.get(f"/guilds/{guild_id}/roles")
+            resp.raise_for_status()
+            return resp.json()
 ```
 
-### 6.3 Auth Flow
+### 5.2 Synchronization Task
+Create `apps/api/app/provisioning/sync.py`:
+```python
+import logging
+from datetime import datetime, timezone
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.models import DiscordAccount, DiscordRoleMapping, Membership
+from app.provisioning.client import DiscordClient
 
-**Discord OAuth is handled entirely in Next.js via NextAuth.js.** After NextAuth completes the Discord OAuth flow:
+logger = logging.getLogger("sync_worker")
 
-1. NextAuth stores the Discord access token and user info in its session.
-2. The Next.js app makes API calls to Fastify with a session cookie or a JWT issued by NextAuth.
-3. The Fastify `auth` plugin verifies the NextAuth JWT (using the shared `NEXTAUTH_SECRET`) on every request.
-4. On first login, the API creates a `users` record and a `discord_accounts` record.
-
-**Do not implement a separate OAuth flow in Fastify.** NextAuth owns the browser-facing OAuth dance.
-
-### 6.4 Bot Webhook
-
-The existing Discord bot calls `POST /bot/webhook` to:
-- Report events (role changes, member joins/leaves).
-- Trigger sync for a specific user.
-
-This endpoint verifies the `X-Internal-Secret` header against `API_INTERNAL_SECRET`. On a role change event, it calls `runSync()` for the affected user only (a targeted sync, not a full guild sync).
-
-Request body schema:
-```typescript
-type BotWebhookPayload =
-  | { event: 'member.role_update'; discordId: string }
-  | { event: 'member.join'; discordId: string; username: string }
-  | { event: 'member.leave'; discordId: string };
+async def run_sync(db: AsyncSession, discord_client: DiscordClient, guild_id: str) -> dict:
+    errors = []
+    synced_count = 0
+    
+    try:
+        # 1. Fetch Discord users and mapped database roles
+        members = await discord_client.get_guild_members(guild_id)
+        
+        map_stmt = select(DiscordRoleMapping).where(DiscordRoleMapping.sync_enabled == True)
+        map_res = await db.execute(map_stmt)
+        mappings = map_res.scalars().all()
+        mapping_dict = {m.discord_role_id: m.group_id for m in mappings}
+        
+        # 2. Iterate and sync roles
+        for member in members:
+            discord_id = member["user"]["id"]
+            roles = member["roles"]
+            
+            acc_stmt = select(DiscordAccount).where(DiscordAccount.discord_id == discord_id)
+            acc_res = await db.execute(acc_stmt)
+            account = acc_res.scalar_one_or_none()
+            
+            if not account:
+                continue  # User has not registered in the app dashboard yet
+                
+            user_id = account.user_id
+            
+            # Fetch current user synced memberships
+            mem_stmt = select(Membership).where(
+                Membership.user_id == user_id,
+                Membership.source == "discord_sync"
+            )
+            mem_res = await db.execute(mem_stmt)
+            current_mems = {m.group_id: m for m in mem_res.scalars().all()}
+            
+            target_group_ids = {mapping_dict[r] for r in roles if r in mapping_dict}
+            
+            # Add missing memberships
+            for group_id in target_group_ids:
+                if group_id not in current_mems:
+                    new_mem = Membership(
+                        user_id=user_id,
+                        group_id=group_id,
+                        source="discord_sync"
+                    )
+                    db.add(new_mem)
+                    synced_count += 1
+            
+            # Remove stale memberships
+            for group_id, membership in current_mems.items():
+                if group_id not in target_group_ids:
+                    await db.delete(membership)
+                    synced_count += 1
+                    
+            account.last_synced_at = datetime.now(timezone.utc)
+            
+        await db.commit()
+    except Exception as e:
+        logger.error(f"Sync worker failed: {e}")
+        errors.append(str(e))
+        await db.rollback()
+        
+    return {"synced_count": synced_count, "errors": errors}
 ```
 
-### 6.5 Plugin Route Mounting
+### 5.3 Scheduler Setup
+Schedule the job using **APScheduler**'s AsyncIOScheduler inside `apps/api/app/main.py`'s lifespan. Run every `SYNC_INTERVAL_MINUTES` env variable (default: 15).
 
-The `plugin-loader.ts` Fastify plugin:
-1. Iterates over all manifests in `PluginLoader.getLoaded()`.
-2. For each plugin, calls `fastify.register(async (pluginScope) => { await manifest.onLoad(pluginScope, ctx) }, { prefix: /api/plugins/${manifest.id} })`.
-3. This gives each plugin its own Fastify scope for error handling and hooks.
+***
 
-### 6.6 Startup Sequence
+## Phase 6 — FastAPI Core API (`apps/api/app`)
 
-In `server.ts`, the startup sequence is:
+Core API layout, routes, JWT security middleware, and startup lifespans.
 
-1. Register Fastify plugins (cookie, session, cors, iam, auth).
-2. Register all core routes.
-3. Seed system groups (idempotent).
-4. Seed core permissions (idempotent).
-5. Load plugin manifests (run migrations, register routes, register event subscriptions).
-6. Start provisioning scheduler.
-7. Listen on port 4000.
+### 6.1 Server Lifespan Configuration
+Create `apps/api/app/main.py`:
+```python
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from app.config import settings
+from app.database import engine, session_factory
+from app.events.bus import event_bus
+from app.plugin_sdk.loader import PluginLoader
+from app.provisioning.client import DiscordClient
+from app.provisioning.sync import run_sync
+from app.routers import auth, iam, provisioning, plugins, audit, bot
+
+scheduler = AsyncIOScheduler()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 1. Start event bus
+    await event_bus.start()
+    
+    # 2. Discover and mount plugins
+    loader = PluginLoader(app, session_factory)
+    await loader.discover_and_load()
+    app.state.plugin_loader = loader
+    
+    # 3. Schedule provisioning worker
+    discord_client = DiscordClient(settings.discord_bot_token)
+    scheduler.add_job(
+        run_sync,
+        "interval",
+        minutes=settings.sync_interval_minutes,
+        args=[session_factory, discord_client, settings.discord_guild_id]
+    )
+    scheduler.start()
+    
+    yield
+    
+    # Shutdown steps
+    scheduler.shutdown()
+    await engine.dispose()
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="bnb-motherboard-api",
+        version="1.0.0",
+        lifespan=lifespan
+    )
+    
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.allowed_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
+    
+    app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+    app.include_router(iam.router, prefix="/api/iam", tags=["iam"])
+    app.include_router(provisioning.router, prefix="/api/provisioning", tags=["provisioning"])
+    app.include_router(plugins.router, prefix="/api/plugins", tags=["plugins"])
+    app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
+    app.include_router(bot.router, prefix="/api/bot", tags=["bot"])
+    
+    return app
+
+app = create_app()
+```
+
+### 6.2 Settings Model
+Create `apps/api/app/config.py`:
+```python
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    database_url: str
+    session_secret: str
+    api_internal_secret: str
+    nextauth_secret: str
+    
+    discord_client_id: str
+    discord_client_secret: str
+    discord_bot_token: str
+    discord_guild_id: str
+    
+    sync_interval_minutes: int = 15
+    allowed_origins: list[str] = ["http://localhost:3000"]
+
+settings = Settings()
+```
+
+### 6.3 NextAuth JWT Authentication Dependency
+Verify JWT cookies issued by NextAuth using PyJWT or python-jose:
+
+Create `apps/api/app/dependencies.py`:
+```python
+import uuid
+from typing import Annotated, AsyncGenerator
+from fastapi import Depends, HTTPException, Request, status
+from jose import jwt
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.config import settings
+from app.database import session_factory
+from app.iam.principal import ResolvedPrincipal, resolve_principal
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with session_factory() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+
+DbDep = Annotated[AsyncSession, Depends(get_db)]
+
+async def get_current_user(request: Request, db: DbDep) -> ResolvedPrincipal:
+    token = request.cookies.get("next-auth.session-token") or request.headers.get("Authorization")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session token missing"
+        )
+        
+    if token.startswith("Bearer "):
+        token = token[7:]
+        
+    try:
+        # Decode NextAuth session token containing discord details
+        payload = jwt.decode(token, settings.nextauth_secret, algorithms=["HS256"])
+        user_id = payload.get("sub") or payload.get("userId")
+        if not user_id:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session token")
+
+    try:
+        principal = await resolve_principal(db, uuid.UUID(user_id))
+        return principal
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+CurrentUserDep = Annotated[ResolvedPrincipal, Depends(get_current_user)]
+```
 
 ***
 
 ## Phase 7 — Next.js Web App (`apps/web`)
 
-> **Search context 7** before implementing Next.js App Router patterns, particularly `layout.tsx` structure, `use client` / `use server` boundary conventions, and NextAuth v5 session access.
+The Next.js 15 app router manages dashboard views and handles auth callbacks with NextAuth.js.
 
-### 7.1 Install Dependencies
+### 7.1 NextAuth Upsert Callbacks
+On sign-in, NextAuth performs a server-to-server upsert webhook call to the FastAPI app to ensure internal user profiles are correctly matched to the database:
 
-```bash
-cd apps/web
-bun add next react react-dom next-auth
-bun add @bnb/ui
-bun add -D @types/react @types/node typescript
-```
-
-### 7.2 Directory Structure
-
-```
-apps/web/
-├── app/
-│   ├── layout.tsx                  # Root layout (providers, fonts, nav shell)
-│   ├── page.tsx                    # Redirect to /dashboard or /login
-│   ├── (auth)/
-│   │   └── login/page.tsx          # Login page with Discord OAuth button
-│   ├── (dashboard)/
-│   │   ├── layout.tsx              # Authenticated layout with sidebar
-│   │   ├── dashboard/page.tsx      # Home dashboard
-│   │   ├── users/page.tsx          # IAM: user list
-│   │   ├── users/[id]/page.tsx     # IAM: user detail + group memberships
-│   │   ├── groups/page.tsx         # IAM: group list
-│   │   ├── groups/[id]/page.tsx    # IAM: group detail + member list
-│   │   ├── discord-mappings/page.tsx  # Admin: map Discord roles to groups
-│   │   ├── grants/page.tsx         # IAM: grant/revoke permissions
-│   │   ├── audit/page.tsx          # Audit log viewer
-│   │   └── plugins/
-│   │       └── [pluginId]/
-│   │           └── [[...slug]]/page.tsx  # Dynamic plugin UI mount point
-│   └── api/
-│       └── auth/[...nextauth]/route.ts   # NextAuth handler
-├── components/                     # App-level components (imports from @bnb/ui)
-├── lib/
-│   ├── api-client.ts               # Typed fetch wrapper for Fastify API
-│   └── auth.ts                     # NextAuth config (Discord provider)
-├── next.config.ts
-└── tsconfig.json
-```
-
-### 7.3 NextAuth Configuration
-
-**`lib/auth.ts`**:
+Update `apps/web/lib/auth.ts`:
 ```typescript
 import NextAuth from 'next-auth';
 import Discord from 'next-auth/providers/discord';
@@ -1324,10 +1273,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId: process.env.DISCORD_CLIENT_ID!,
       clientSecret: process.env.DISCORD_CLIENT_SECRET!,
       authorization: {
-        params: {
-          // Request guild member read scope to fetch roles
-          scope: 'identify email guilds.members.read',
-        },
+        params: { scope: 'identify email guilds.members.read' },
       },
     }),
   ],
@@ -1345,22 +1291,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
     async signIn({ account, profile }) {
-      // On sign-in, call the Fastify API to upsert the user
-      // This ensures a user record exists before any further requests
-      await fetch(`${process.env.API_URL}/auth/upsert`, {
+      // Upsert Discord account profile in FastAPI core DB
+      await fetch(`${process.env.API_URL}/api/auth/upsert`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Internal-Secret': process.env.API_INTERNAL_SECRET!,
         },
         body: JSON.stringify({
-          discordId: profile?.id,
+          discord_id: profile?.id,
           username: profile?.username,
           email: profile?.email,
-          avatarHash: profile?.avatar,
-          accessToken: account?.access_token,
-          refreshToken: account?.refresh_token,
-          tokenExpiresAt: account?.expires_at ? new Date(account.expires_at * 1000) : null,
+          avatar_hash: profile?.avatar,
+          access_token: account?.access_token,
+          refresh_token: account?.refresh_token,
+          token_expires_at: account?.expires_at ? new Date(account.expires_at * 1000).toISOString() : null,
         }),
       });
       return true;
@@ -1369,132 +1314,103 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 });
 ```
 
-### 7.4 Plugin UI Mount Point
+### 7.2 UI Plugin Mounting Router
+Next.js loads the frontend UI of plugin components dynamically:
 
-**`app/(dashboard)/plugins/[pluginId]/[[...slug]]/page.tsx`**:
-
+Update `apps/web/app/(dashboard)/plugins/[pluginId]/[[...slug]]/page.tsx`:
 ```typescript
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@bnb/ui';
 
-// Load the plugin's UI component dynamically.
-// Plugin packages must be installed in apps/web for this to work.
-// The plugin registry API provides the list of installed plugins and their panel metadata.
 export default async function PluginPage({ params }: { params: { pluginId: string } }) {
   const PluginPanel = dynamic(
-    () => import(`@bnb-plugins/${params.pluginId}/ui`).catch(() => () => <div>Plugin not found</div>),
-    { loading: () => <Skeleton className="h-96 w-full" />, ssr: false },
+    () => import(`@bnb-plugins/${params.pluginId}/ui`).catch(() => () => <div>Plugin UI panel not found</div>),
+    { loading: () => <Skeleton className="h-96 w-full" />, ssr: false }
   );
 
   return <PluginPanel />;
 }
 ```
 
-**Note:** Third-party plugin packages must follow the naming convention `@bnb-plugins/<pluginId>` and be installed in `apps/web/package.json` before the web app is rebuilt.
-
-### 7.5 Sidebar Navigation
-
-The sidebar is built server-side. It fetches `/api/plugins/manifest` from the Fastify API (using the internal `API_URL`) to get the list of active plugin UI panels with `placement: 'sidebar'` and renders them as navigation links. The sidebar also includes hardcoded core links (Dashboard, Users, Groups, Discord Mappings, Grants, Audit Log).
-
 ***
 
-## Phase 8 — Shared UI Package (`@bnb/ui`)
+## Phase 8 — Shared UI Package (`packages/ui`)
 
-### 8.1 Setup
+The UI components library is a Turborepo-managed workspace exporting custom components styled using **Tailwind CSS and Radix UI Primitives (Shadcn layout styling)**. 
 
-```bash
-cd packages/ui
-bun add react radix-ui tailwindcss
-bun add -D @types/react
+Components must include:
+*   `Button`, `Input`, `Select`
+*   `Dialog`, `DropdownMenu`
+*   `Table`, `Badge` (success, warning, error, info)
+*   `Card`, `Skeleton`
+
+Consuming apps configure Tailwind CSS paths to index the shared module classes automatically:
+```ts
+// tailwind.config.js
+module.exports = {
+  content: [
+    "./app/**/*.{js,ts,jsx,tsx}",
+    "../../packages/ui/src/**/*.{js,ts,jsx,tsx}"
+  ],
+  // ...
+}
 ```
-
-The package exports primitive, accessible components. All components accept standard HTML props via `ComponentPropsWithoutRef`. Every component must have a `displayName`.
-
-### 8.2 Required Base Components
-
-These components must exist at minimum before any plugin can be developed:
-
-- `Button` (variants: primary, secondary, destructive, ghost; sizes: sm, md, lg)
-- `Input` (with label and error state)
-- `Select` (Radix-based)
-- `Dialog` / `DialogTrigger` / `DialogContent` (Radix-based)
-- `Table` / `TableHead` / `TableRow` / `TableCell`
-- `Badge` (variants: default, success, warning, error)
-- `Skeleton` (loading placeholder)
-- `Spinner`
-- `Avatar` (with fallback initials)
-- `Card` / `CardHeader` / `CardContent`
-- `Alert` (info, warning, error)
-- `Pagination`
-- `DropdownMenu` (Radix-based)
-
-All components use Tailwind CSS. The package ships a `tailwind.config.ts` that consuming apps extend.
 
 ***
 
 ## Phase 9 — Discord Role Mapping UI
 
-This is the key admin screen. It lives at `/discord-mappings` in the web app.
+The administrative dashboard allows users to bind Discord guild roles to operational groups dynamically.
 
-### 9.1 What It Does
-
-1. Fetches the current list of Discord roles from `GET /api/iam/discord-roles` (the Fastify API fetches this from Discord using the bot token).
-2. Fetches the current list of internal groups from `GET /api/iam/groups`.
-3. Fetches current mappings from `GET /api/iam/discord-mappings`.
-4. Renders a table: one row per Discord role. Each row has:
-   - Role name and color swatch.
-   - A `<Select>` to choose which internal group it maps to (or "No mapping").
-   - A toggle for `syncEnabled`.
-5. Saves changes via `PUT /api/iam/discord-mappings` (upsert — only changed rows).
-
-### 9.2 No Optimistic Updates
-
-This screen is not optimistic. On save, show a spinner, wait for the API response, then refresh. Mapping changes are consequential — do not show false success states.
+1.  Renders a matrix of Discord roles fetched via `GET /api/iam/discord-roles`.
+2.  Allows selection of internal groups fetched via `GET /api/iam/groups`.
+3.  Saves updates directly by invoking `PUT /api/iam/discord-mappings` (upsert updates).
+4.  Displays blocking spinners during processing. No optimistic updates.
 
 ***
 
 ## Phase 10 — Dockerfiles and Production Compose
 
+Docker files configured to support optimized production builds.
+
 ### 10.1 API Dockerfile (`docker/api.Dockerfile`)
-
+Use Astral's `uv` image to package backend services:
 ```dockerfile
-FROM oven/bun:1-alpine AS base
+FROM astral-sh/uv:python3.11-alpine AS builder
+
 WORKDIR /app
 
-FROM base AS deps
-COPY package.json bun.lockb turbo.json ./
-COPY packages/db/package.json ./packages/db/
-COPY packages/iam/package.json ./packages/iam/
-COPY packages/events/package.json ./packages/events/
-COPY packages/provisioning/package.json ./packages/provisioning/
-COPY packages/plugin-sdk/package.json ./packages/plugin-sdk/
-COPY apps/api/package.json ./apps/api/
-RUN bun install --frozen-lockfile
+# Enable bytecode compilation
+ENV UV_COMPILE_BYTECODE=1
 
-FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN bun run build --filter=apps/api...
+# Copy dependency mappings
+COPY apps/api/pyproject.toml apps/api/uv.lock ./
+RUN uv sync --frozen --no-install-project
 
-FROM base AS runner
+# Copy app code
+COPY apps/api/app ./app
+COPY apps/api/alembic ./alembic
+COPY apps/api/alembic.ini ./
+
+# Run production build
+FROM python:3.11-slim-bookworm
+
 WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=builder /app/apps/api/dist ./dist
-COPY --from=builder /app/packages ./packages
-COPY --from=builder /app/node_modules ./node_modules
-CMD ["bun", "run", "dist/index.js"]
+COPY --from=builder /app /app
+
+ENV PATH="/app/.venv/bin:$PATH"
+EXPOSE 8000
+
+CMD ["fastapi", "run", "app/main.py", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-**Note:** Run `bunx drizzle-kit migrate` as an init container or pre-start step. Add a `migrate` service to `docker-compose.prod.yml` that runs migrations and exits before the API starts.
-
 ### 10.2 Web Dockerfile (`docker/web.Dockerfile`)
-
 ```dockerfile
 FROM oven/bun:1-alpine AS base
 WORKDIR /app
 
 FROM base AS deps
-COPY package.json bun.lockb turbo.json ./
+COPY package.json bun.lock turbo.json ./
 COPY packages/ui/package.json ./packages/ui/
 COPY apps/web/package.json ./apps/web/
 RUN bun install --frozen-lockfile
@@ -1511,21 +1427,21 @@ COPY --from=builder /app/apps/web/.next ./.next
 COPY --from=builder /app/apps/web/public ./public
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/web/package.json ./package.json
+EXPOSE 3000
+
 CMD ["bun", "run", "start"]
 ```
 
-### 10.3 Production Docker Compose (`docker-compose.prod.yml`)
-
-Override the base compose for production:
-
+### 10.3 DB Migration Init Task
+Add a lightweight migration script runner to ensure SQL updates complete successfully before launching production apps:
 ```yaml
-version: "3.9"
+# docker-compose.prod.yml
 services:
   migrate:
     build:
       context: .
       dockerfile: docker/api.Dockerfile
-    command: ["bun", "run", "packages/db/src/migrate.ts"]
+    command: ["alembic", "upgrade", "head"]
     env_file: .env
     depends_on:
       - postgres
@@ -1535,75 +1451,29 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-
-  web:
-    environment:
-      NODE_ENV: production
-```
-
-Run in production with:
-```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 ***
 
 ## Coding Conventions
 
-### Naming
+### Backend (Python)
 
-- **Files:** `kebab-case.ts`
-- **Classes:** `PascalCase`
-- **Functions and variables:** `camelCase`
-- **Constants:** `SCREAMING_SNAKE_CASE` for module-level constants, `camelCase` for local
-- **Database columns:** `snake_case` (Drizzle handles the TypeScript ↔ SQL mapping)
-- **TypeScript types and interfaces:** `PascalCase`, prefix `I` is forbidden
-- **Zod schemas:** suffix `Schema` (e.g. `CreateUserSchema`)
-- **React components:** `PascalCase`, one component per file, file name matches component name
+- **Coding Standard**: PEP 8.
+- **Variable and File Names**: `snake_case`.
+- **Classes**: `PascalCase`.
+- **Type Annotations**: Mandatory on all function arguments and return signatures.
+- **Route Definitions**: Use `Annotated` dependencies (e.g. `db: DbDep`) and explicit `response_model` definitions on every route.
+- **Async Execution**: Use async handlers only for non-blocking I/O operations (HTTPX client calls, SQLAlchemy async executions). Use plain blocking `def` functions for code that is CPU-bound or blocking (runs in ThreadPool).
+- **Unit Testing**: pytest with `httpx.AsyncClient` transport wrappers for route isolation.
 
-### TypeScript
+### Frontend (Next.js & TypeScript)
 
-- `strict: true`, `exactOptionalPropertyTypes: true`, `noUncheckedIndexedAccess: true` — all enforced.
-- Never use `as any`. Use `as unknown as T` only as an escape hatch with a comment explaining why.
-- Never suppress type errors with `@ts-ignore`. Use `@ts-expect-error` with an explanation when unavoidable.
-- Prefer type narrowing and discriminated unions over casting.
-- All async functions that can fail must return a typed `Result<T, E>` or throw typed errors — do not return `undefined` on failure.
-
-### API Design
-
-- All API routes use JSON body and JSON response.
-- All routes return consistent envelope: `{ data: T }` for success, `{ error: { code: string; message: string } }` for failure.
-- HTTP status codes: 200 (OK), 201 (Created), 400 (Bad Request), 401 (Unauthenticated), 403 (Forbidden), 404 (Not Found), 422 (Validation Error), 500 (Internal Error).
-- All input is validated with Zod schemas. Fastify's `schema` option uses JSON Schema; convert Zod schemas to JSON Schema using `zod-to-json-schema` or use `fastify-type-provider-zod`.
-- All list endpoints are paginated with `limit` and `cursor` query params.
-
-### Error Handling
-
-- Never swallow errors silently.
-- The Fastify global error handler logs the full error and returns a safe, sanitized response.
-- Never expose internal error messages, stack traces, or database errors to API responses.
-- Use a custom `AppError` class with a `code` string for business logic errors.
-
-### Git & Commit Conventions
-
-- **Always perform atomic commits:** Keep commits small, focused, and representing a single logical change. Do not group unrelated changes into a single commit.
-- **Use conventional commits:** Format messages using `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`.
-
-***
-
-## Anti-Hallucination Checkpoints
-
-The agent MUST perform a context 7 search at the following moments:
-
-1. **Before writing any Drizzle schema** — verify current `drizzle-orm` PostgreSQL API.
-2. **Before writing the IAM policy evaluator** — verify the Drizzle query builder conditions API (`and`, `or`, `inArray`, `isNull`, `gt`).
-3. **Before writing the Fastify server** — verify Fastify 5 `register`, decorators, and type provider patterns.
-4. **Before implementing NextAuth v5** — verify `next-auth` v5 callback signatures, `signIn` hook, and session shape.
-5. **Before writing the Discord guild member fetch** — verify rate limits, pagination params, and required bot permissions.
-6. **Before the plugin loader's `dynamic import` in Next.js** — verify `next/dynamic` usage in App Router.
-7. **Before writing any Dockerfile** — verify the `oven/bun` base image tag and Bun build output paths.
-
-If context 7 is unavailable, pause and run `bunx skills find <topic>` before proceeding.
+- **Variables and Functions**: `camelCase`.
+- **Files**: `kebab-case.ts`.
+- **Components**: `PascalCase` matching file names exactly.
+- **Type Checking**: Enforced strict null checks, no `as any` type-escaping.
+- **Linting**: ESLint + Prettier.
 
 ***
 
@@ -1611,12 +1481,9 @@ If context 7 is unavailable, pause and run `bunx skills find <topic>` before pro
 
 Each phase is complete when:
 
-- [ ] All TypeScript compiles with `bun run typecheck` — zero errors.
-- [ ] No `any` types introduced.
-- [ ] All new routes have Zod-validated input.
-- [ ] All new database operations have correct schema references (run `bunx drizzle-kit check` if available).
-- [ ] All public functions have JSDoc comments.
-- [ ] Docker Compose brings the service up with `docker compose up` — no errors in logs.
-- [ ] The feature is reachable and functional end-to-end.
-
-Do not begin the next phase until the current phase's definition of done is met.
+- [ ] All TypeScript compiles successfully without errors (`bun run typecheck`).
+- [ ] Backend codebase linting/typechecking succeeds.
+- [ ] No `any` annotations exist in TypeScript or untyped parameters in Python.
+- [ ] Input parameters validate against strictly mapped Pydantic/Zod schemas.
+- [ ] Tests execute successfully with zero failures.
+- [ ] App logs clean executions upon invoking `docker compose up`.

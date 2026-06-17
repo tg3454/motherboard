@@ -7,7 +7,6 @@
       "skillPath": "skills/ai-agent-development/SKILL.md",
       "computedHash": "b1b19e3f430a701d95b1dc604c608c5e290dd12d3d10fbf6500c5fdbd8039c0f"
     },
-
     "brainstorming": {
       "source": "obra/superpowers",
       "sourceType": "github",
@@ -38,18 +37,6 @@
       "skillPath": "skills/devops-rollout-plan/SKILL.md",
       "computedHash": "9c71bc5839febec1c42fdd6f5aed3beb3fa9df399460f0d20310124abd77cc31"
     },
-    "drizzle": {
-      "source": "lobehub/lobehub",
-      "sourceType": "github",
-      "skillPath": ".agents/skills/drizzle/SKILL.md",
-      "computedHash": "a6d790ff12e5f9091d496f5512cb726b27ade39572389d15f5cb83cec1382124"
-    },
-    "drizzle-orm-expert": {
-      "source": "sickn33/antigravity-awesome-skills",
-      "sourceType": "github",
-      "skillPath": "skills/drizzle-orm-expert/SKILL.md",
-      "computedHash": "4fb8d5fd0e18f04a5fdd41dcbac883beabdd0cf4959fbdd51f2f854c6130cfcf"
-    },
     "fastapi": {
       "source": "fastapi/fastapi",
       "sourceType": "github",
@@ -62,7 +49,6 @@
       "skillPath": "skills/fastapi-patterns/SKILL.md",
       "computedHash": "019d085ed11817ab5ff691a6eaadea878b613cde75143689262328e61537a950"
     },
-
     "finance-billing-ops": {
       "source": "affaan-m/ECC",
       "sourceType": "github",
@@ -105,7 +91,6 @@
       "skillPath": "skills/nextjs-best-practices/SKILL.md",
       "computedHash": "5344522f15f544513456e77b858377368f24e680732af5efeb5a67bbab021bc1"
     },
-
     "plan-orchestrate": {
       "source": "affaan-m/ECC",
       "sourceType": "github",
