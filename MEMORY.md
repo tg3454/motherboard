@@ -103,3 +103,5 @@ plugins/     — First- and third-party plugins (reserved, empty)
 
 **S18 — Phase 5 Provisioning Worker:** Created custom errors (`errors.py`), Discord API client with pagination & rate limit backoff (`client.py`), core sync engine (`sync.py`), and APScheduler integration (`scheduler.py`) under `apps/api/app/provisioning/`. Fixed 3 bugs in existing IAM router (`iam.py`) and registered it along with the provisioning sync router in `main.py` lifespan. Added `aiosqlite` dependency for in-memory SQLite testing. Created full unit/integration test suites for Discord client and sync worker, showing 100% green test pass.
 
+**S19 — Database & Seeder Audit Fixes:** Switched to new branch `akshat/fixes`, performed a database/seeding audit, implemented symmetric token encryption (`EncryptedString` using Fernet) in `models.py`, refactored `seeder.py` to be dialect-independent (SQLite-compatible), added `clear_db_cache` helper to `database.py`, fixed test-suite mock configuration in `conftest.py`, and added verification tests in `test_encryption.py`. Pushed commits to `origin/akshat/fixes`.
+
