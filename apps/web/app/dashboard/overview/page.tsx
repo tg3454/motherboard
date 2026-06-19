@@ -2,7 +2,7 @@ import React from "react";
 import { LayoutDashboard } from "lucide-react";
 import EmptyState from "../../../components/dashboard/EmptyState";
 import StatCard from "components/dashboard/StatCard";
-import { OverviewContent } from "./OverviewContent";
+import { OverviewContent } from "components/dashboard/OverviewContent";
 
 export const metadata = {
   title: "Overview — bits&bytes Motherboard",
